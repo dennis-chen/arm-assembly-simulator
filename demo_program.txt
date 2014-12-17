@@ -1,0 +1,50 @@
+	 TEQ.W   R1, #0
+	 ITT EQ
+	 MOVEQ   R0, #0x7FFFFFFF
+	 BXEQ    LR
+	 PUSH    {R4,LR}
+	 MOV.W   LR, #1
+	 TEQ.W   R0, R1
+	 IT MI
+	 MOVMI.W LR, #0
+	 CMP     R0, #0
+	 IT MI
+	 NEGMI   R0, R0
+	 CMP     R1, #0
+	 IT MI
+	 NEGMI   R1, R1
+	 CLZ.W   R4, R0
+	 CMP     R4, #0x1E
+	 IT GE
+	 MOVGE   R4, #0x1E
+	 LSL.W   R2, R0, R4
+	 RSB.W   R12, R4, #0x1E
+	 UDIV.W  R0, R2, R1
+	 CLZ.W   R3, R0
+	 CMP     R12, R3
+	 ITT GE
+	 RSBGE.W R0, LR, #0x80000000
+	 POPGE   {R4,PC}
+	 MLS.W   R2, R1, R0, R2
+	 CLZ.W   R4, R2
+	 CMP     R4, R12
+	 BGE     divfinished30
+divmore30                               
+	 SUB.W   R12, R12, R4
+	 LSL.W   R2, R2, R4
+	 LSL.W   R0, R0, R4
+	 UDIV.W  R3, R2, R1
+	 MLS.W   R2, R1, R3, R2
+	 ADD     R0, R3
+	 CLZ.W   R4, R2
+	 CMP     R4, R12
+	 BLE     divmore30
+divfinished30                           
+	 LSL.W   R2, R2, R12
+	 LSL.W   R0, R0, R12
+	 UDIV.W  R3, R2, R1
+	 ADD     R0, R3
+	 TEQ.W   LR, #0
+	 IT EQ
+	 NEGEQ   R0, R0
+	 POP     {R4,PC}

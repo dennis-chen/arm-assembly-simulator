@@ -236,63 +236,6 @@ def abs_32(a):
     else:
         return a
 
-def s_divide_iq30(dd,dr):
-    """divides two iq30 binary strings and returns an iq30 binary str"""
-    assert len(dd) == 34 and len(dr) == 34
-    r = [None]*32 #register list
-    r[0] = dd
-    r[1] = dr
-    if int(dr,2) == 0:
-        #if divisor == 0 return largest possible positive number
-        return s_bin_se_32(2147483647)
-    #in original program, value of link register and r[4] are pushed to the stack here
-    r[31] = s_bin_se_32(1) #link register is set to 1
-    if (dd[2] != dr[2]): #dd[2] is the MSB of the bit string so this statement checks for sign equality
-        r[31] = s_bin_se_32(0)
-    r[0] = abs_32(r[0])
-    r[1] = abs_32(r[1])
-    r[4] = s_bin_se_32(min(int(clz_32(r[0]),2),30)) #r4 = min(clz(r0),30))
-    r[2] = l_shift_32(r[0],int(r[4],2))
-    r[12],c,o = subtract_32(s_bin_se_32(30),r[4])
-    r[0] = u_divide_32(r[2],r[1])
-    r[3] = clz_32(r[0])
-    if s_bin_to_int_32(r[12]) >= s_bin_to_int_32(r[3]):
-        r[0],c,o = subtract_32(s_bin_se_32(-2147483648),r[31])
-        return r[0]
-        #in the original, the stack is popped to the pc counter to branch
-    r[2],c,o = subtract_32(r[2],s_multiply_ls_32(r[0],r[1]))
-    #in the line above, remainder = dd-quotient*dr
-    r[4] = clz_32(r[2])
-    if s_bin_to_int_32(r[4]) >= s_bin_to_int_32(r[12]):
-        r = div_finished_32(r) #pass register values
-    else:
-        r = div_more_32(r) #pass register values
-    return r[0]
-
-def div_more_32(r):
-    r[12],c,o = subtract_32(r[12],r[4])
-    assert s_bin_to_int_32(r[4]) >= 0
-    r[2] = l_shift_32(r[2],s_bin_to_int_32(r[4]))
-    r[0] = l_shift_32(r[0],s_bin_to_int_32(r[4]))
-    r[3] = u_divide_32(r[2],r[1])
-    r[2],c,o = subtract_32(r[2],s_multiply_ls_32(r[1],r[3]))
-    r[0],c,o = add_32(r[0],r[3])
-    r[4] = clz_32(r[2])
-    if s_bin_to_int_32(r[4]) <= s_bin_to_int_32(r[12]):
-        r = div_more_32(r)
-    else:
-        r = div_finished_32(r)
-    return r
-
-def div_finished_32(r):
-    r[2] = l_shift_32(r[2],s_bin_to_int_32(r[12]))
-    r[0] = l_shift_32(r[0],s_bin_to_int_32(r[12]))
-    r[3] = u_divide_32(r[2],r[1])
-    r[0],c,o = add_32(r[0],r[3])
-    if s_bin_to_int_32(r[31]) == 0:
-        r[0] = s_multiply_ls_32(r[0],s_bin_se_32(-1))
-    return r
-
 def iq30_to_float(a):
     """converts a iq30 number to a float"""
     assert isinstance(a,str)
@@ -324,27 +267,6 @@ def float_to_iq30(a):
             exp = -(i+1)
             remainder -= 2**-(i+1)
     return ''.join(iq30_l)
-
-def test_div_accuracy():
-    """evaluates accuracy of ARM fixed point IQ30 division vs python's floating point division, which we'll take as perfectly accurate."""
-    num_tests = 1000
-    test_vals = []
-    total_accuracy = 0
-    for i in xrange(num_tests):
-        a = random.uniform(0,1)
-        b = random.uniform(0,1)
-        if a < b:
-            test_vals.append((a,b))
-        else:
-            test_vals.append((b,a))
-    for test_val in test_vals:
-        temp_res = s_divide_iq30(float_to_iq30(test_val[0]),float_to_iq30(test_val[1]))
-        arm_res = iq30_to_float(temp_res)
-        python_res = test_val[0]/test_val[1]
-        pcnt_accuracy = abs((python_res - arm_res)/(python_res))
-        total_accuracy += pcnt_accuracy
-    total_accuracy = total_accuracy/num_tests
-    print "fixed point division within " + str(100*total_accuracy) + "% of pythons' floating point division on average over "+str(num_tests)+" test runs!"
 
 def test_float_to_iq30():
     res = s_divide_iq30(float_to_iq30(.25),float_to_iq30(.25))
@@ -408,99 +330,59 @@ def rotate_r_ext(a,shift_in_val):
     assert len('0b'+str(shift_in_val)+a[2:-1]) == 34
     return '0b'+str(shift_in_val)+a[2:-1]
 
-def IQ29atan(a,b):
-    """returns arctan(a/b) as an IQ29 binary str"""
-    assert isinstance(a,str) and isinstance(b,str)
-    assert len(a) == 34 and len(b) == 34
-    r = [None]*32 #register list
-    r[0] = a
-    r[1] = b
-    print r[0]
-    print s_bin_se_32(-2147483648)
-    r[12] = and_32(r[0],s_bin_se_32(-2147483648))
-    print r[12]
-    r[0] = abs_32(r[0])
-    print r[0]
-    r[2] = l_shift_32(r[1],1)
-    if s_bin_to_int_32(r[1]) < 0:
-        r[1] = abs_32(r[1])
-        r[12] = rotate_r_ext(r[12],1)
-    else:
-        r[12] = r_shift_32_log(r[12],1)
-    if s_bin_to_int_32(r[0]) == s_bin_to_int_32(r[1]):
-        r = operands_are_equal_30(r)
-    if s_bin_to_int_32(r[0]) > s_bin_to_int_32(r[1]):
-        r[2] = r[0]
-        r[0] = r[1] #swap r[0] and r[1]
-        r[1] = r[2]
-        #push r[4] and r[5] to the stack
-    r[5] = clz_32(r[1])
-    r[1] = l_shift_32(r[1],s_bin_to_int_32(r[5]))
-    r[2] = r_shift_32_log(r[1],22)
-    #r[3] = div_table_st
-    r[3] = float_to_iq29(random.uniform(0,1))
-    r[2] = float_to_iq29(random.uniform(0,1))
-    #r[2] = div_table_st
-    u_multiply_32_2(r[2],r[2])
-    r[3],r[4] = u_multiply_32_2(r[2],r[2])
-    r[3],r[4] = u_multiply_32_2(r[3],r[1])
-    r[3] = subtract_32(r[2],r[3])[0]
-    r[2] = l_shift_32(r[3],1)
-    r[3],r[4] = u_multiply_32_2(r[2],r[2])
-    r[3],r[4] = u_multiply_32_2(r[3],r[1])
-    r[2] = subtract_32(r[2],r[3])[0]
-    r[0],r[1] = u_multiply_32_2(r[0],r[2])
-    r[5] = add_32(r[5],s_bin_se_32(2))[0]
-    r[4] = subtract_32(s_bin_se_32(32),r[5])[0]
-    r[1] = r_shift_32_log(r[1],s_bin_to_int_32(r[4]))
-    r[0] = l_shift_32(r[0],s_bin_to_int_32(r[5]))
-    r[0] = r[1] #BUT MIKES UNSURE WHAT THIS RLY IS
-    r[2] = r_shift_32_log(r[0],24)
-    r[2] = add_32(r[2],l_shift_32(r[2],1))[0]
-    #r[3] = atan2putable
-    r[3] = float_to_iq29(random.uniform(0,1))
-    #r[3] = atan2putable
-    r[3] = add_32(r[3],l_shift_32(r[2],2))[0]
-    r[4] = r[3]#BUT MIKES UNSURE WHAT THIS RLY IS
-    r[1],r[2] = u_multiply_32_2(r[0],r[4])
-    r[4] = r[5]#BUT MIKES UNSURE WHAT THIS RLY IS
-    r[4] = subtract_32(r[4],r[1])[0]
-    r[1],r[2] = u_multiply_32_2(r[0],r[4])
-    r[0] = add_32(r[1],r[5])[0]
-    print r[0]
-    r[0] = r_shift_32_log(r[0],2)
-    r = equal_operands_reentry_point_30(r)
-    return r[0]
+class simulator():
+    """simulates an arm program given to it as a text file"""
+    def __init__(self,txt):
+        self.txt = txt
+        self.prog = self.convert_txt(self.txt)
+        #prog is a list of strings that will be executed, with the exception that it is an integer if we are meant to jump at that point in execution
+        #self.run_prog(self.prog)
 
-def equal_operands_reentry_point_30(r):
-    if s_bin_to_int_32(r[12]) < 0:
-        r[0] = subtract_32('0b0010'+'0'*28,r[0])[0]
-    r[12] = l_shift_32(r[12],1)
-    if s_bin_to_int_32(r[12]) < 0:
-        r[0] = subtract_32('0b0100'+'0'*28,r[0])[0]
-    r[12] = l_shift_32(r[12],1)
-    if s_bin_to_int_32(r[12]) < 0:
-        r[0] = abs_32(r[0])
-    r[1] = '0b01100100100001111110110101010001'
-    r[0],r[1] = s_multiply_32_2(r[1],r[0])
-    #not sure if final bit or the 19th bit sets the flag
-    if r[0][-1] == '1':
-        r[0] = r_shift_32_ari(r[0],19)
-        r[0] = add_32(r[0],s_bin_se_32(1))
-    else:
-        r[0] = r_shift_32_ari(r[0],19)
-    #ADC.W Does something???
-    #pop r4,r5 off the stack
-    return r
+    def convert_txt(self,txt_file):
+        content = []
+        with open(txt_file) as f:
+            content = f.readlines()
+        for i,c in enumerate(content):
+            word_list = c.split()
+            for j,word in enumerate(word_list):
+                if word[-1] == ',':
+                    word_list[j] = word[:-1]
+                if word[-1] == '}':
+                    word_list[j] = word[:-1]
+                    if word[0] == '{':
+                        word_list[j] = word[1:-1]
+                if word[0] == '#':
+                    word_list[j] = str(int(word[-1:],16))
+            content[i] = word_list
+        new_content = []
+        for c in content:
+            if c[0][:2] != 'IT':
+                new_content.append(c)
+        for i,c in enumerate(new_content):
+            if len(c) > 1:
+                new_c = c[0]+'('
+                for j in xrange(len(c)-1):
+                    new_c += c[j+1]
+                    if j != len(c) - 2:
+                        new_c += ','
+                new_c += ')'
+                new_content[i] = new_c
+        for i,string in enumerate(new_content):
+            if type(string) is str:
+                new_content[i] = 'self.'+string.replace(".","")
 
-def operands_are_equal_30(r):
-    if s_bin_to_int_32(r[0]) == 0:
-        return r
-    else:
-        r[0] = s_bin_se_32(-2147483648)
-        #push r4 and r5 to the stack
-        equal_operands_reentry_point_30(r)
-        return r
+    def run_prog(self,prog):
+        """takes a list of strings that python executes"""
+        self.regs = [None]*32 #register list
+        self.PC = 0
+        prog_len = len(prog)
+        while self.pc < prog:
+            if isinstance(prog[self.pc],int):
+                self.pc = prog[self.pc]
+            else:
+                exec prog[self.pc]
+                self.pc+=1
+        print "Simulation finished!"
 
 if __name__ == "__main__":
-    test_div_accuracy()
+    s = simulator('program.txt')
