@@ -208,8 +208,8 @@ def abs_32(a):
     else:
         return a
 
-def s_divide_iq31(dd,dr):
-    """divides two iq31 binary strings and returns an iq31 binary str"""
+def s_divide_iq30(dd,dr):
+    """divides two iq30 binary strings and returns an iq30 binary str"""
     assert len(dd) == 34 and len(dr) == 34
     r = [None]*32 #register list
     r[0] = dd
@@ -234,9 +234,8 @@ def s_divide_iq31(dd,dr):
     r[3] = clz_32(r[0])
     #print r[3]
     #for some reason, this being a > statement instead of a >= statement fixed several things. oh god.
-    if s_bin_to_int_32(r[12]) > s_bin_to_int_32(r[3]):
-        print "entered crap"
-        r[0],c,o = subtract_32(s_bin_se_31(-2147483648),r[30])
+    if s_bin_to_int_32(r[12]) >= s_bin_to_int_32(r[3]):
+        r[0],c,o = subtract_32(s_bin_se_32(-2147483648),r[31])
         return r[0]
         #in the original, the stack is popped to the pc counter to branch
     print r[0]
@@ -304,32 +303,30 @@ def float_to_iq30(a):
     abs_a = abs(a)
     assert abs_a <= 1
     if a >= 0:
-        iq31 = '0b'+'0'+31*'0'
+        iq30 = '0b'+'0'+31*'0'
     else:
-        iq31 = '0b'+'1'+31*'0'
-    iq31_l = list(iq31)
+        iq30 = '0b'+'1'+31*'0'
+    iq30_l = list(iq30)
     remainder = abs_a
     for i in range(30):
         if 2**-(i+1) <= remainder:
-            iq31_l[i+4] = '1'
+            iq30_l[i+4] = '1'
             exp = -(i+1)
             remainder -= 2**-(i+1)
-    return ''.join(iq31_l)
+    return ''.join(iq30_l)
 
 if __name__ == "__main__":
     #bug note: if divisor is > 0.5, infinite recursion calls occur. no idea why?
     zero = '0b'+'0'*32
     dd = '0b001'+'0'*29
     dr = '0b010'+'0'*29
-    a = float_to_iq30(1)
-    print a
-    print iq30_to_float(a)
-    res = s_divide_iq31(float_to_iq30(.25),float_to_iq30(.50))
-    res = s_divide_iq31(float_to_iq30(.25),float_to_iq30(.88))
+    res = s_divide_iq30(float_to_iq30(.25),float_to_iq30(.25))
     print res
     print iq30_to_float(res)
-    #res = s_divide_iq31(float_to_iq31(.25),float_to_iq31(.50))
-    #res = s_divide_iq31(float_to_iq31(.125),float_to_iq31(.625))
-    #print res
-    #print iq31_to_float(res)
+    res = s_divide_iq30(float_to_iq30(.25),float_to_iq30(0))
+    print res
+    print iq30_to_float(res)
+    res = s_divide_iq30(float_to_iq30(.2325),float_to_iq30(.91))
+    print res
+    print iq30_to_float(res)
 
