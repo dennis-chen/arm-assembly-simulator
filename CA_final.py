@@ -204,7 +204,7 @@ def clz_32(a):
 def abs_32(a):
     """returns positive twos complement representation of binary str"""
     if a[2] == '1':
-        return s_multiply_32(a,s_bin_32(-1))
+        return s_multiply_ls_32(a,s_bin_32(-1))
     else:
         return a
 
@@ -259,19 +259,48 @@ def div_finished_32(r):
     r[0] = l_shift_32(r[0],s_bin_to_int_32(r[12]))
     r[3] = u_divide_32(r[2],r[1])
     r[0],c,o = add_32(r[0],r[3])
-    print r[0]
     if s_bin_to_int_32(r[31]) == 0:
-        r[0] = s_multiply_32(r[0],s_bin_se_32(-1))
+        r[0] = s_multiply_ls_32(r[0],s_bin_se_32(-1))
     return r
 
+def iq31_to_float(a):
+    """converts a iq31 number to a float"""
+    assert isinstance(a,str)
+    assert len(a) == 34
+    sign_bit = a[2]
+    raw_num = a[3:]
+    float_res = 0
+    if sign_bit == '0':
+        for i, bit in enumerate(raw_num):
+            float_res += 2**-(i+1)*int(bit,2)
+    else:
+        for i, bit in enumerate(raw_num):
+            float_res -= 2**-(i+1)*int(bit,2)
+    return float_res
+
+def float_to_iq31(a):
+    """converts a float to an iq31 number"""
+    abs_a = abs(a)
+    assert abs_a <= 1
+    exp = -1
+    remainder
+    while 2**exp < remainder:
+
+        exp += -1
+    if a < 0:
+        msb = '1'
+    else:
+        msb = '0'
 
 if __name__ == "__main__":
     zero = '0b'+'0'*32
     dd = '0b001'+'0'*29
     dr = '0b010'+'0'*29
+    print iq31_to_float(dd)
+    print iq31_to_float(dr)
     #res = s_divide_iq31(dd,dr)
-    res = s_divide_iq31(dd,zero)
-    print res
-    res = s_divide_iq31(zero,dr)
+    #res = s_divide_iq31(dd,zero)
+    #print res
+    #res = s_divide_iq31(zero,dr)
     print res
 
