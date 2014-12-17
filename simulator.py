@@ -1,4 +1,5 @@
-import random
+import sys
+import os
 
 def add_32(a,b,carry_in='0b0'):
     """takes two 32-digit binary strings and returns their sum in the same format, along with overflow and carryout."""
@@ -370,6 +371,12 @@ class simulator():
         for i,string in enumerate(new_content):
             if type(string) is str:
                 new_content[i] = 'self.'+string.replace(".","")
+        print "text conversion finished! output to your_orig_to_python.txt"
+        outfile = self.txt[:-4] + "_to_python.txt"
+        f=open(outfile,'w+')
+        s1=''.join(str(new_content))
+        f.write(s1)
+        f.close()
 
     def run_prog(self,prog):
         """takes a list of strings that python executes"""
@@ -385,4 +392,6 @@ class simulator():
         print "Simulation finished!"
 
 if __name__ == "__main__":
-    s = simulator('program.txt')
+    for arg in sys.argv:
+        assert os.path.isfile(arg)
+    s = simulator(sys.argv[1])
