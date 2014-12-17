@@ -389,6 +389,14 @@ class simulator():
         #f.write(s1)
         #f.close()
 
+    def UMULL(self,string):
+        """takes 4 arguments in one string seperated by commas, saves unsigned multiply in the first two args"""
+        args = string.split(',')
+        assert len(args) == 4
+        c = self.regs[int(args[2][1:])]
+        d = self.regs[int(args[3][1:])]
+        self.regs[int(args[1][1:])],self.regs[int(args[0][1:])] = u_multiply_32_2(c,d)
+
     def MOVW(self,reg,num):
         """moves number to register"""
         if len(reg) == 1:
