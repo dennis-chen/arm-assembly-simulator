@@ -210,6 +210,7 @@ def abs_32(a):
 
 def s_divide_iq31(dd,dr):
     """divides two iq31 binary strings and returns an iq31 binary str"""
+    assert len(dd) == 34 and len(dr) == 34
     r = [None]*32 #register list
     r[0] = dd
     r[1] = dr
@@ -282,25 +283,28 @@ def float_to_iq31(a):
     """converts a float to an iq31 number"""
     abs_a = abs(a)
     assert abs_a <= 1
-    exp = -1
-    remainder
-    while 2**exp < remainder:
-
-        exp += -1
-    if a < 0:
-        msb = '1'
+    if a >= 0:
+        iq31 = '0b'+'0'+31*'0'
     else:
-        msb = '0'
+        iq31 = '0b'+'1'+31*'0'
+    iq31_l = list(iq31)
+    remainder = abs_a
+    for i in range(31):
+        if 2**-(i+1) <= remainder:
+            iq31_l[i+3] = '1'
+            exp = -(i+1)
+            remainder -= 2**-(i+1)
+    return ''.join(iq31_l)
 
 if __name__ == "__main__":
     zero = '0b'+'0'*32
     dd = '0b001'+'0'*29
     dr = '0b010'+'0'*29
-    print iq31_to_float(dd)
-    print iq31_to_float(dr)
+    res = s_divide_iq31(float_to_iq31(.25),float_to_iq31(.5))
+    #print iq31_to_float(dd)
+    #print iq31_to_float(dr)
     #res = s_divide_iq31(dd,dr)
     #res = s_divide_iq31(dd,zero)
     #print res
     #res = s_divide_iq31(zero,dr)
-    print res
 
