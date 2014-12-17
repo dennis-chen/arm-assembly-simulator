@@ -18,7 +18,6 @@ def add_64(a,b,carry_in='0b0'):
     assert len(a) == 66 and len(b) == 66
     res = None
     msb_carry_out = bin(0)
-    print type(int(a,2)+int(b,2)+int(carry_in,2))
     temp_sum = bin(int(a,2)+int(b,2)+int(carry_in,2))
     if len(temp_sum) < 66:
         res = s_bin_se_64(int(a,2)+int(b,2)+int(carry_in,2))
@@ -223,34 +222,20 @@ def s_divide_iq30(dd,dr):
         r[31] = s_bin_se_32(0)
     r[0] = abs_32(r[0])
     r[1] = abs_32(r[1])
-    r[4] = s_bin_se_32(min(int(clz_32(r[0]),2),30)) #r4 = min(clz(r0),31))
-    #print r[4]
+    r[4] = s_bin_se_32(min(int(clz_32(r[0]),2),30)) #r4 = min(clz(r0),30))
     r[2] = l_shift_32(r[0],int(r[4],2))
-    #print r[2]
     r[12],c,o = subtract_32(s_bin_se_32(30),r[4])
-    #print r[12]
     r[0] = u_divide_32(r[2],r[1])
-    #print r[0]
     r[3] = clz_32(r[0])
-    #print r[3]
-    #for some reason, this being a > statement instead of a >= statement fixed several things. oh god.
     if s_bin_to_int_32(r[12]) >= s_bin_to_int_32(r[3]):
         r[0],c,o = subtract_32(s_bin_se_32(-2147483648),r[31])
         return r[0]
         #in the original, the stack is popped to the pc counter to branch
-    print r[0]
-    print r[1]
-    print r[2]
-    #print s_multiply_ls_32(r[0],r[1])
     r[2],c,o = subtract_32(r[2],s_multiply_ls_32(r[0],r[1]))
-    #print r[2]
     #in the line above, remainder = dd-quotient*dr
     r[4] = clz_32(r[2])
-    #print r[4]
-    #print r[12]
     if s_bin_to_int_32(r[4]) >= s_bin_to_int_32(r[12]):
         r = div_finished_32(r) #pass register values
-        #print r
     else:
         r = div_more_32(r) #pass register values
     return r[0]
@@ -271,13 +256,9 @@ def div_more_32(r):
     return r
 
 def div_finished_32(r):
-    #print r
     r[2] = l_shift_32(r[2],s_bin_to_int_32(r[12]))
-    print r[2]
     r[0] = l_shift_32(r[0],s_bin_to_int_32(r[12]))
-    print r[0]
     r[3] = u_divide_32(r[2],r[1])
-    print r[3]
     r[0],c,o = add_32(r[0],r[3])
     if s_bin_to_int_32(r[31]) == 0:
         r[0] = s_multiply_ls_32(r[0],s_bin_se_32(-1))
@@ -321,12 +302,11 @@ if __name__ == "__main__":
     dd = '0b001'+'0'*29
     dr = '0b010'+'0'*29
     res = s_divide_iq30(float_to_iq30(.25),float_to_iq30(.25))
-    print res
     print iq30_to_float(res)
     res = s_divide_iq30(float_to_iq30(.25),float_to_iq30(0))
-    print res
+    print iq30_to_float(res)
+    res = s_divide_iq30(float_to_iq30(0),float_to_iq30(.25))
     print iq30_to_float(res)
     res = s_divide_iq30(float_to_iq30(.2325),float_to_iq30(.91))
-    print res
     print iq30_to_float(res)
 
