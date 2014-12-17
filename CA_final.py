@@ -106,10 +106,10 @@ def s_bin_se_64(num):
         orig_len = len(raw_bin)
         pos_rep = '0b'+'0'*(64-orig_len)+raw_bin
         inv = invert(pos_rep)
-        res,msb_carry_out,over_flow = add_64(inv,bin_se_pos_64(1))
+        res,msb_carry_out,over_flow = add_64(inv,'0b'+'0'*63+'1')
         return res
     else:
-        return bin_se_pos_64(0)
+        return '0b'+'0'*64
 
 def s_bin_to_int_32(bin_str):
     """converts 32 bit binary strings in twos complement representation into an integer"""
@@ -237,8 +237,7 @@ def s_divide_iq31(dd,dr):
         r = div_finished_32(r) #pass register values
     else:
         r = div_more_32(r) #pass register values
-    print r[0]
-    return s_bin_to_int_32(r[0])
+    return r[0]
 
 def div_more_32(r):
     r[12],c,o = subtract_32(r[12],r[4])
@@ -260,6 +259,7 @@ def div_finished_32(r):
     r[0] = l_shift_32(r[0],s_bin_to_int_32(r[12]))
     r[3] = u_divide_32(r[2],r[1])
     r[0],c,o = add_32(r[0],r[3])
+    print r[0]
     if s_bin_to_int_32(r[31]) == 0:
         r[0] = s_multiply_32(r[0],s_bin_se_32(-1))
     return r
