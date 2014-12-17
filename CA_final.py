@@ -133,6 +133,16 @@ def s_multiply_32(a,b):
     res_int = a_int*b_int
     return s_bin_se_64(res_int)
 
+def s_multiply_32_2(a,b):
+    """multiplies two signed 32 bit strings and returns two 32 bit bit strings"""
+    assert isinstance(a,str) and isinstance(b,str)
+    assert len(a) == 34 and len(b) == 34
+    a_int = s_bin_to_int_32(a)
+    b_int = s_bin_to_int_32(b)
+    res_int = a_int*b_int
+    res_64 = s_bin_se_64(res_int)
+    return res_64[:34],'0b'+res_64[34:]
+
 def s_multiply_ls_32(a,b):
     """multiplies two signed 32 bit strings and returns the least significant 32 bits of the result"""
     assert isinstance(a,str) and isinstance(b,str)
@@ -150,6 +160,16 @@ def u_multiply_32(a,b):
     b_int = int(b,2)
     res_int = a_int*b_int
     return u_bin_se_64(res_int)
+
+def u_multiply_32_2(a,b):
+    """multiplies two unsigned 32 bit strings and two 32 bit bit strings"""
+    assert isinstance(a,str) and isinstance(b,str)
+    assert len(a) == 34 and len(b) == 34
+    a_int = int(a,2)
+    b_int = int(b,2)
+    res_int = a_int*b_int
+    res_64 = u_bin_se_64(res_int)
+    return res_64[:34],'0b'+res_64[34:]
 
 def s_divide_32(a,b):
     """returns a/b, signed integer division."""
@@ -173,22 +193,29 @@ def l_shift_32(a,shift_val):
     """returns 32 bit string shifted left by int shift_val"""
     assert isinstance(a,str) and isinstance(shift_val,int)
     assert len(a) == 34
+    assert shift_val <= 32
+    assert len('0b'+a[2+shift_val:]+'0'*shift_val) == 34
     return '0b'+a[2+shift_val:]+'0'*shift_val
 
 def r_shift_32_log(a,shift_val):
     """returns 32 bit string shifted right by int shift_val"""
     assert isinstance(a,str) and isinstance(shift_val,int)
     assert len(a) == 34
-    return '0b'+'0'*shift_val+a[3:-shift_val]
+    assert shift_val <= 32
+    return '0b'+'0'*shift_val+a[2:-shift_val]
+    assert len('0b'+'0'*shift_val+a[2:-shift_val]) == 34
 
 def r_shift_32_ari(a,shift_val):
     """returns 32 bit string shifted right by int shift_val"""
     assert isinstance(a,str) and isinstance(shift_val,int)
     assert len(a) == 34
+    assert shift_val <= 32
     if a[2] == '0':
-        return '0b'+'0'*shift_val+a[3:-shift_val]
+        assert len('0b'+'0'*shift_val+a[2:-shift_val]) == 34
+        return '0b'+'0'*shift_val+a[2:-shift_val]
     else:
-        return '0b'+'1'*shift_val+a[3:-shift_val]
+        assert len('0b'+'1'*shift_val+a[2:-shift_val]) == 34
+        return '0b'+'1'*shift_val+a[2:-shift_val]
 
 def clz_32(a):
     """counts leading zeros of a 32 bit binary str, returns unsigned 32 bit str. Ignores the signed MSB"""
@@ -329,6 +356,152 @@ def test_float_to_iq30():
     res = s_divide_iq30(float_to_iq30(.2325),float_to_iq30(.91))
     print iq30_to_float(res)
 
-if __name__ == "__main__":
-    test_div_accuracy()
+def iq29_to_float(a):
+    """converts a iq29 number to a float"""
+    assert isinstance(a,str)
+    assert len(a) == 34
+    sign_bit = a[2]
+    raw_num = a[5:]
+    float_res = 0
+    if sign_bit == '0':
+        for i, bit in enumerate(raw_num):
+            float_res += 2**-(i+1)*int(bit,2)
+    else:
+        for i, bit in enumerate(raw_num):
+            float_res -= 2**-(i+1)*int(bit,2)
+    return float_res
 
+def float_to_iq29(a):
+    """converts a float to an iq29 number"""
+    abs_a = abs(a)
+    assert abs_a <= 1
+    if a >= 0:
+        iq29 = '0b'+'0'+31*'0'
+    else:
+        iq29 = '0b'+'1'+31*'0'
+    iq29_l = list(iq29)
+    remainder = abs_a
+    for i in range(29):
+        if 2**-(i+1) <= remainder:
+            iq29_l[i+5] = '1'
+            exp = -(i+1)
+            remainder -= 2**-(i+1)
+    return ''.join(iq29_l)
+
+def and_32(a,b):
+    """returns 32 bit and of two bit strings"""
+    assert isinstance(a,str) and isinstance(b,str)
+    assert len(a) == 34 and len(b) == 34
+    res = ''
+    for a_char,b_char in zip(a[2:],b[2:]):
+        if a_char == b_char and a_char == '1':
+            res += '1'
+        else:
+            res += '0'
+    assert len('0b'+res) == 34
+    return '0b'+res
+
+def rotate_r_ext(a,shift_in_val):
+    """returns 32 bit string shifted right by one place. The value shifted in on the left is specified as an integer, 0 or 1."""
+    assert isinstance(a,str) and isinstance(shift_in_val,int)
+    assert len(a) == 34
+    assert len('0b'+str(shift_in_val)+a[2:-1]) == 34
+    return '0b'+str(shift_in_val)+a[2:-1]
+
+def IQ29atan(a,b):
+    """returns arctan(a/b) as an IQ29 binary str"""
+    assert isinstance(a,str) and isinstance(b,str)
+    assert len(a) == 34 and len(b) == 34
+    r = [None]*32 #register list
+    r[0] = a
+    r[1] = b
+    print r[0]
+    print s_bin_se_32(-2147483648)
+    r[12] = and_32(r[0],s_bin_se_32(-2147483648))
+    print r[12]
+    r[0] = abs_32(r[0])
+    print r[0]
+    r[2] = l_shift_32(r[1],1)
+    if s_bin_to_int_32(r[1]) < 0:
+        r[1] = abs_32(r[1])
+        r[12] = rotate_r_ext(r[12],1)
+    else:
+        r[12] = r_shift_32_log(r[12],1)
+    if s_bin_to_int_32(r[0]) == s_bin_to_int_32(r[1]):
+        r = operands_are_equal_30(r)
+    if s_bin_to_int_32(r[0]) > s_bin_to_int_32(r[1]):
+        r[2] = r[0]
+        r[0] = r[1] #swap r[0] and r[1]
+        r[1] = r[2]
+        #push r[4] and r[5] to the stack
+    r[5] = clz_32(r[1])
+    r[1] = l_shift_32(r[1],s_bin_to_int_32(r[5]))
+    r[2] = r_shift_32_log(r[1],22)
+    #r[3] = div_table_st
+    r[3] = float_to_iq29(random.uniform(0,1))
+    r[2] = float_to_iq29(random.uniform(0,1))
+    #r[2] = div_table_st
+    u_multiply_32_2(r[2],r[2])
+    r[3],r[4] = u_multiply_32_2(r[2],r[2])
+    r[3],r[4] = u_multiply_32_2(r[3],r[1])
+    r[3] = subtract_32(r[2],r[3])[0]
+    r[2] = l_shift_32(r[3],1)
+    r[3],r[4] = u_multiply_32_2(r[2],r[2])
+    r[3],r[4] = u_multiply_32_2(r[3],r[1])
+    r[2] = subtract_32(r[2],r[3])[0]
+    r[0],r[1] = u_multiply_32_2(r[0],r[2])
+    r[5] = add_32(r[5],s_bin_se_32(2))[0]
+    r[4] = subtract_32(s_bin_se_32(32),r[5])[0]
+    r[1] = r_shift_32_log(r[1],s_bin_to_int_32(r[4]))
+    r[0] = l_shift_32(r[0],s_bin_to_int_32(r[5]))
+    r[0] = r[1] #BUT MIKES UNSURE WHAT THIS RLY IS
+    r[2] = r_shift_32_log(r[0],24)
+    r[2] = add_32(r[2],l_shift_32(r[2],1))[0]
+    #r[3] = atan2putable
+    r[3] = float_to_iq29(random.uniform(0,1))
+    #r[3] = atan2putable
+    r[3] = add_32(r[3],l_shift_32(r[2],2))[0]
+    r[4] = r[3]#BUT MIKES UNSURE WHAT THIS RLY IS
+    r[1],r[2] = u_multiply_32_2(r[0],r[4])
+    r[4] = r[5]#BUT MIKES UNSURE WHAT THIS RLY IS
+    r[4] = subtract_32(r[4],r[1])[0]
+    r[1],r[2] = u_multiply_32_2(r[0],r[4])
+    r[0] = add_32(r[1],r[5])[0]
+    r[0] = r_shift_32_log(r[0],2)
+    r = equal_operands_reentry_point_30(r)
+    return r[0]
+
+def equal_operands_reentry_point_30(r):
+    if s_bin_to_int_32(r[12]) < 0:
+        r[0] = subtract_32('0b0010'+'0'*28,r[0])[0]
+    r[12] = l_shift_32(r[12],1)
+    if s_bin_to_int_32(r[12]) < 0:
+        r[0] = subtract_32('0b0100'+'0'*28,r[0])[0]
+    r[12] = l_shift_32(r[12],1)
+    if s_bin_to_int_32(r[12]) < 0:
+        r[0] = abs_32(r[0])
+    r[1] = '0b01100100100001111110110101010001'
+    r[0],r[1] = s_multiply_32_2(r[1],r[0])
+    #not sure if final bit or the 19th bit sets the flag
+    if r[0][-1] == '1':
+        r[0] = r_shift_32_ari(r[0],19)
+        r[0] = add_32(r[0],s_bin_se_32(1))
+    else:
+        r[0] = r_shift_32_ari(r[0],19)
+    #ADC.W Does something???
+    #pop r4,r5 off the stack
+    return r
+
+def operands_are_equal_30(r):
+    if s_bin_to_int_32(r[0]) == 0:
+        return r
+    else:
+        r[0] = s_bin_se_32(-2147483648)
+        #push r4 and r5 to the stack
+        equal_operands_reentry_point_30(r)
+        return r
+
+if __name__ == "__main__":
+    a = float_to_iq29(.55555)
+    b = float_to_iq29(1)
+    print IQ29atan(a,b)
