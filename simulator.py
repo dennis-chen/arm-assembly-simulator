@@ -1,3 +1,4 @@
+import re
 import sys
 import os
 
@@ -337,7 +338,7 @@ class simulator():
         self.txt = txt
         self.prog = self.convert_txt(self.txt)
         #prog is a list of strings that will be executed, with the exception that it is an integer if we are meant to jump at that point in execution
-        #self.run_prog(self.prog)
+        self.run_prog(self.prog)
 
     def convert_txt(self,txt_file):
         content = []
@@ -355,6 +356,11 @@ class simulator():
                 if word[0] == '#':
                     word_list[j] = str(int(word[-1:],16))
             content[i] = word_list
+        #print content
+        for c in content:
+            for i,j in enumerate(c):
+                if i!=0:
+                    c[i] = "'"+str(c[i])+"'"
         new_content = []
         for c in content:
             if c[0][:2] != 'IT':
@@ -371,24 +377,45 @@ class simulator():
         for i,string in enumerate(new_content):
             if type(string) is str:
                 new_content[i] = 'self.'+string.replace(".","")
-        print "text conversion finished! output to your_orig_to_python.txt"
-        outfile = self.txt[:-4] + "_to_python.txt"
-        f=open(outfile,'w+')
-        s1=''.join(str(new_content))
-        f.write(s1)
-        f.close()
+        #print new_content
+        return new_content
+        #for i,string in enumerate(new_content):
+        #    if type(string) is str:
+        #        new_content[i] = re.sub("R([^,]+)",
+        #print "text conversion finished! output to your_orig_to_python.txt"
+        #outfile = self.txt[:-4] + "_to_python.txt"
+        #f=open(outfile,'w+')
+        #s1=''.join(str(new_content))
+        #f.write(s1)
+        #f.close()
+
+    def MOVW(self,reg,num):
+        """moves number to register"""
+        if len(reg) == 1:
+            self.regs[int(reg[1])] = u_bin_se_32(int(num))
+        elif len(reg) == 2:
+            self.regs[int(reg[1:2])] = u_bin_se_32(int(num))
+
+    def ADD(self,string):
+        """takes three arguments, writes B+C to A"""
+        args = string.split(',')
+        b = self.regs[int(args[1][1:])]
+        c = self.regs[int(args[2][1:])]
+        self.regs[int(args[0][1:])] = add_32(b,c)[0]
 
     def run_prog(self,prog):
         """takes a list of strings that python executes"""
         self.regs = [None]*32 #register list
         self.PC = 0
         prog_len = len(prog)
-        while self.pc < prog:
-            if isinstance(prog[self.pc],int):
-                self.pc = prog[self.pc]
+        while self.PC < prog_len:
+            if isinstance(prog[self.PC],int):
+                self.PC = prog[self.PC]
             else:
-                exec prog[self.pc]
-                self.pc+=1
+                print prog[self.PC]
+                exec prog[self.PC]
+                print self.regs
+                self.PC+=1
         print "Simulation finished!"
 
 if __name__ == "__main__":

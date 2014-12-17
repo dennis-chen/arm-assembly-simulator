@@ -1,0 +1,3 @@
+MOV.W	R0, #5
+MOV.W	R1, #5
+ADD		R2,R1,R0
