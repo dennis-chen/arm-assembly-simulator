@@ -1,3 +1,5 @@
+import random
+
 def add_32(a,b,carry_in='0b0'):
     """takes two 32-digit binary strings and returns their sum in the same format, along with overflow and carryout."""
     assert len(a) == 34 and len(b) == 34
@@ -296,11 +298,28 @@ def float_to_iq30(a):
             remainder -= 2**-(i+1)
     return ''.join(iq30_l)
 
-if __name__ == "__main__":
-    #bug note: if divisor is > 0.5, infinite recursion calls occur. no idea why?
-    zero = '0b'+'0'*32
-    dd = '0b001'+'0'*29
-    dr = '0b010'+'0'*29
+def test_div_accuracy():
+    """evaluates accuracy of ARM fixed point IQ30 division vs python's floating point division, which we'll take as perfectly accurate."""
+    num_tests = 1000
+    test_vals = []
+    total_accuracy = 0
+    for i in xrange(num_tests):
+        a = random.uniform(0,1)
+        b = random.uniform(0,1)
+        if a < b:
+            test_vals.append((a,b))
+        else:
+            test_vals.append((b,a))
+    for test_val in test_vals:
+        temp_res = s_divide_iq30(float_to_iq30(test_val[0]),float_to_iq30(test_val[1]))
+        arm_res = iq30_to_float(temp_res)
+        python_res = test_val[0]/test_val[1]
+        pcnt_accuracy = abs((python_res - arm_res)/(python_res))
+        total_accuracy += pcnt_accuracy
+    total_accuracy = total_accuracy/num_tests
+    print "fixed point division within " + str(100*total_accuracy) + "% of pythons' floating point division on average over "+str(num_tests)+" test runs!"
+
+def test_float_to_iq30():
     res = s_divide_iq30(float_to_iq30(.25),float_to_iq30(.25))
     print iq30_to_float(res)
     res = s_divide_iq30(float_to_iq30(.25),float_to_iq30(0))
@@ -309,4 +328,7 @@ if __name__ == "__main__":
     print iq30_to_float(res)
     res = s_divide_iq30(float_to_iq30(.2325),float_to_iq30(.91))
     print iq30_to_float(res)
+
+if __name__ == "__main__":
+    test_div_accuracy()
 
