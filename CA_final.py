@@ -223,11 +223,11 @@ def s_divide_iq31(dd,dr):
         r[31] = s_bin_se_32(0)
     r[0] = abs_32(r[0])
     r[1] = abs_32(r[1])
-    r[4] = s_bin_se_32(min(int(clz_32(r[0]),2),31)) #r4 = min(clz(r0),31))
+    r[4] = s_bin_se_32(min(int(clz_32(r[0]),2),30)) #r4 = min(clz(r0),31))
     #print r[4]
     r[2] = l_shift_32(r[0],int(r[4],2))
     #print r[2]
-    r[12],c,o = subtract_32(s_bin_se_32(31),r[4])
+    r[12],c,o = subtract_32(s_bin_se_32(30),r[4])
     #print r[12]
     r[0] = u_divide_32(r[2],r[1])
     #print r[0]
@@ -236,7 +236,7 @@ def s_divide_iq31(dd,dr):
     #for some reason, this being a > statement instead of a >= statement fixed several things. oh god.
     if s_bin_to_int_32(r[12]) > s_bin_to_int_32(r[3]):
         print "entered crap"
-        r[0],c,o = subtract_32(s_bin_se_32(-2147483648),r[31])
+        r[0],c,o = subtract_32(s_bin_se_31(-2147483648),r[30])
         return r[0]
         #in the original, the stack is popped to the pc counter to branch
     print r[0]
@@ -284,12 +284,12 @@ def div_finished_32(r):
         r[0] = s_multiply_ls_32(r[0],s_bin_se_32(-1))
     return r
 
-def iq31_to_float(a):
-    """converts a iq31 number to a float"""
+def iq30_to_float(a):
+    """converts a iq30 number to a float"""
     assert isinstance(a,str)
     assert len(a) == 34
     sign_bit = a[2]
-    raw_num = a[3:]
+    raw_num = a[4:]
     float_res = 0
     if sign_bit == '0':
         for i, bit in enumerate(raw_num):
@@ -299,8 +299,8 @@ def iq31_to_float(a):
             float_res -= 2**-(i+1)*int(bit,2)
     return float_res
 
-def float_to_iq31(a):
-    """converts a float to an iq31 number"""
+def float_to_iq30(a):
+    """converts a float to an iq30 number"""
     abs_a = abs(a)
     assert abs_a <= 1
     if a >= 0:
@@ -309,9 +309,9 @@ def float_to_iq31(a):
         iq31 = '0b'+'1'+31*'0'
     iq31_l = list(iq31)
     remainder = abs_a
-    for i in range(31):
+    for i in range(30):
         if 2**-(i+1) <= remainder:
-            iq31_l[i+3] = '1'
+            iq31_l[i+4] = '1'
             exp = -(i+1)
             remainder -= 2**-(i+1)
     return ''.join(iq31_l)
@@ -321,16 +321,15 @@ if __name__ == "__main__":
     zero = '0b'+'0'*32
     dd = '0b001'+'0'*29
     dr = '0b010'+'0'*29
-    res = s_divide_iq31(float_to_iq31(.25),float_to_iq31(.50))
-    res = s_divide_iq31(float_to_iq31(.125),float_to_iq31(.625))
-    #res = s_divide_iq31(float_to_iq31(.),float_to_iq31(.500000001))
+    a = float_to_iq30(1)
+    print a
+    print iq30_to_float(a)
+    res = s_divide_iq31(float_to_iq30(.25),float_to_iq30(.50))
+    res = s_divide_iq31(float_to_iq30(.25),float_to_iq30(.88))
     print res
-    print iq31_to_float(res)
-    #res = s_divide_iq31(float_to_iq31(.265),float_to_iq31(.559))
+    print iq30_to_float(res)
+    #res = s_divide_iq31(float_to_iq31(.25),float_to_iq31(.50))
+    #res = s_divide_iq31(float_to_iq31(.125),float_to_iq31(.625))
     #print res
     #print iq31_to_float(res)
-    #res = s_divide_iq31(float_to_iq31(0),float_to_iq31(.5))
-    #print res
-    #res = s_divide_iq31(float_to_iq31(.5),float_to_iq31(0))
-    #print res
 
