@@ -132,6 +132,15 @@ def s_multiply_32(a,b):
     res_int = a_int*b_int
     return s_bin_se_64(res_int)
 
+def s_multiply_ls_32(a,b):
+    """multiplies two signed 32 bit strings and returns the least significant 32 bits of the result"""
+    assert isinstance(a,str) and isinstance(b,str)
+    assert len(a) == 34 and len(b) == 34
+    a_int = s_bin_to_int_32(a)
+    b_int = s_bin_to_int_32(b)
+    res_int = a_int*b_int
+    return s_bin_se_64(res_int)[-32:]
+
 def u_multiply_32(a,b):
     """multiplies two unsigned 32 bit strings and returns a 64 bit string"""
     assert isinstance(a,str) and isinstance(b,str)
@@ -140,7 +149,6 @@ def u_multiply_32(a,b):
     b_int = int(b,2)
     res_int = a_int*b_int
     return u_bin_se_64(res_int)
-
 
 def s_divide_32(a,b):
     """returns a/b, signed integer division."""
@@ -160,9 +168,109 @@ def u_divide_32(a,b):
     res_int = a_int/b_int
     return u_bin_se_32(res_int)
 
+def l_shift_32(a,shift_val):
+    """returns 32 bit string shifted left by int shift_val"""
+    assert isinstance(a,str) and isinstance(shift_val,int)
+    assert len(a) == 34
+    return '0b'+a[2+shift_val:]+'0'*shift_val
+
+def r_shift_32_log(a,shift_val):
+    """returns 32 bit string shifted right by int shift_val"""
+    assert isinstance(a,str) and isinstance(shift_val,int)
+    assert len(a) == 34
+    return '0b'+'0'*shift_val+a[3:-shift_val]
+
+def r_shift_32_ari(a,shift_val):
+    """returns 32 bit string shifted right by int shift_val"""
+    assert isinstance(a,str) and isinstance(shift_val,int)
+    assert len(a) == 34
+    if a[2] == '0':
+        return '0b'+'0'*shift_val+a[3:-shift_val]
+    else:
+        return '0b'+'1'*shift_val+a[3:-shift_val]
+
+def clz_32(a):
+    """counts leading zeros of a 32 bit binary str, returns unsigned 32 bit str"""
+    #THIS MIGHT BE WRONG! DONT KNOW IF WE SHOULD BE LOOKING AT SIGNED BIT
+    raw_str = a[2:]
+    counter = 0
+    index = 0
+    str_len = len(raw_str)
+    while index != str_len and raw_str[index] != '1':
+        counter += 1
+        index += 1
+    return s_bin_se_32(counter)
+
+def abs_32(a):
+    """returns positive twos complement representation of binary str"""
+    if a[2] == '1':
+        return s_multiply_32(a,s_bin_32(-1))
+    else:
+        return a
+
+def s_divide_iq31(dd,dr):
+    """divides two iq31 binary strings and returns an iq31 binary str"""
+    r = [None]*32 #register list
+    r[0] = dd
+    r[1] = dr
+    if int(dr,2) == 0:
+        #if divisor == 0 return largest possible positive number
+        return s_bin_se_32(2147483647)
+    #in original program, value of link register and r[4] are pushed to the stack here
+    r[31] = s_bin_se_32(1) #link register is set to 1
+    if (dd[2] != dr[2]): #dd[2] is the MSB of the bit string so this statement checks for sign equality
+        r[31] = s_bin_se_32(0)
+    r[0] = abs_32(r[0])
+    r[1] = abs_32(r[1])
+    r[4] = s_bin_se_32(min(int(clz_32(r[0]),2),8)) #r4 = min(clz(r0),8))
+    r[2] = l_shift_32(r[0],int(r[4],2))
+    r[12],c,o = subtract_32(s_bin_se_32(8),r[4])
+    r[0] = u_divide_32(r[2],r[1])
+    r[3] = clz_32(r[0])
+    if s_bin_to_int_32(r[12]) >= s_bin_to_int_32(r[3]):
+        return s_bin_se_32(-2147483648)
+        #in the original, the stack is popped to the pc counter to branch
+    r[2],c,o = subtract_32(r[2],s_multiply_ls_32(r[0],r[1]))
+    #in the line above, remainder = dd-quotient*dr
+    r[4] = clz_32(r[2])
+    if s_bin_to_int_32(r[4]) >= s_bin_to_int_32(r[12]):
+        r = div_finished_32(r) #pass register values
+    else:
+        r = div_more_32(r) #pass register values
+    print r[0]
+    return s_bin_to_int_32(r[0])
+
+def div_more_32(r):
+    r[12],c,o = subtract_32(r[12],r[4])
+    assert s_bin_to_int_32(r[4]) >= 0
+    r[2] = l_shift_32(r[2],s_bin_to_int_32(r[4]))
+    r[0] = l_shift_32(r[0],s_bin_to_int_32(r[4]))
+    r[3] = u_divide_32(r[2],r[1])
+    r[2],c,o = subtract_32(r[2],s_multiply_ls_32(r[1],r[3]))
+    r[0],c,o = add_32(r[0],r[3])
+    r[4] = clz_32(r[2])
+    if s_bin_to_int_32(r[4]) <= s_bin_to_int_32(r[12]):
+        r = div_more_32(r)
+    else:
+        r = div_finished_32(r)
+    return r
+
+def div_finished_32(r):
+    r[2] = l_shift_32(r[2],s_bin_to_int_32(r[12]))
+    r[0] = l_shift_32(r[0],s_bin_to_int_32(r[12]))
+    r[3] = u_divide_32(r[2],r[1])
+    r[0],c,o = add_32(r[0],r[3])
+    if s_bin_to_int_32(r[31]) == 0:
+        r[0] = s_multiply_32(r[0],s_bin_se_32(-1))
+    return r
+
+
 if __name__ == "__main__":
-    print u_divide_32(u_bin_se_32(32),u_bin_se_32(9))
-    print s_multiply_32(s_bin_se_32(-31),s_bin_se_32(-10))
-    print s_multiply_32(s_bin_se_32(31),s_bin_se_32(-10))
-    print s_multiply_32(s_bin_se_32(31),s_bin_se_32(-10))
+    zero = '0b'+'0'*32
+    dd = '0b001'+'0'*29
+    dr = '0b010'+'0'*29
+    res = s_divide_iq31(dd,dr)
+    #res = s_divide_iq31(dd,zero)
+    #res = s_divide_iq31(zero,dr)
+    print res
 
