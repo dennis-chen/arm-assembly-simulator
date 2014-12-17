@@ -269,8 +269,9 @@ if __name__ == "__main__":
     zero = '0b'+'0'*32
     dd = '0b001'+'0'*29
     dr = '0b010'+'0'*29
-    res = s_divide_iq31(dd,dr)
-    #res = s_divide_iq31(dd,zero)
-    #res = s_divide_iq31(zero,dr)
+    #res = s_divide_iq31(dd,dr)
+    res = s_divide_iq31(dd,zero)
+    print res
+    res = s_divide_iq31(zero,dr)
     print res
 
