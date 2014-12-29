@@ -14,8 +14,17 @@ def add_32(a,b,carry_in='0b0'):
         res = '0b'+temp_sum[-32:]
     if len(temp_sum) > len(a):
         msb_carry_out = bin(1)
-    over_flow = detect_overflow(a[3:],b[3:],carry_in,msb_carry_out)
+    over_flow = detect_overflow(a,b,res)
     return res,msb_carry_out,over_flow
+
+def detect_overflow(a,b,res):
+    """detects overflow, returns '0b0' or '0b1' depending on whether overflow occurred"""
+    a_sign = a[2]
+    b_sign = b[2]
+    res_sign = res[2]
+    if a_sign == b_sign and b_sign != res_sign:
+        return '0b1'
+    return '0b0'
 
 def add_64(a,b,carry_in='0b0'):
     """takes two 64-digit binary strings and returns their sum in the same format, along with overflow and carryout."""
@@ -31,14 +40,6 @@ def add_64(a,b,carry_in='0b0'):
         msb_carry_out = bin(1)
     over_flow = detect_overflow(a[3:],b[3:],carry_in,msb_carry_out)
     return res,msb_carry_out,over_flow
-
-def detect_overflow(a,b,carry_in,msb_carry_out):
-    """returns 1 digit binary string representing XOR of the carryin+carryout of the MSB. is passed the carryout of the MSB."""
-    msb_carry_in = bin(0)
-    temp_sum = bin(int(a,2)+int(b,2)+int(carry_in,2))
-    if len(temp_sum) > len(a):
-        msb_carry_in = bin(1)
-    return bin(int(msb_carry_in,2)^int(msb_carry_out,2))
 
 def invert(bin_str):
     """inverts binary string of any length. expects it in the format of '0b...'. This particularly nifty list comprehension found on http://stackoverflow.com/questions/3920494/python-flipping-binary-1s-and-0s-in-a-string"""
@@ -332,6 +333,24 @@ def rotate_r_ext(a,shift_in_val):
     assert len('0b'+str(shift_in_val)+a[2:-1]) == 34
     return '0b'+str(shift_in_val)+a[2:-1]
 
+def is_int_str(val):
+    """returns whether a value is an integer string or not"""
+    try: 
+        to_int(val)
+        return True
+    except Exception:
+        return False
+
+def to_int(val):
+    """changes val to an integer, where val is a decimal, binary, or hex string"""
+    if val.isdigit():
+        return int(val)
+    assert len(val) >= 3
+    if val[:2] == '0b':
+        return int(val,2)
+    if val[:2] == '0x':
+        return int(val,16)
+
 class simulator():
     """simulates an arm program given to it as a text file"""
     def __init__(self,txt):
@@ -339,6 +358,11 @@ class simulator():
         self.prog = self.convert_txt(self.txt)
         #prog is a list of strings that will be executed, with the exception that it is an integer if we are meant to jump at that point in execution
         self.run_prog(self.prog)
+        self.LR = None
+        self.n_flag = None
+        self.z_flag = None
+        self.c_flag = None
+        self.v_flag = None
 
     def convert_txt(self,txt_file):
         content = []
@@ -354,7 +378,9 @@ class simulator():
                     if word[0] == '{':
                         word_list[j] = word[1:-1]
                 if word[0] == '#':
-                    word_list[j] = str(int(word[-1:],16))
+                    print word
+                    print str(int(word[1:],16))
+                    word_list[j] = str(int(word[1:],16))
             content[i] = word_list
         #print content
         for c in content:
@@ -377,7 +403,10 @@ class simulator():
         for i,string in enumerate(new_content):
             if type(string) is str:
                 new_content[i] = 'self.'+string.replace(".","")
-        #print new_content
+        for i,string in enumerate(new_content):
+            if type(string) is str:
+                new_content[i] = string.replace("LR","R14")
+        print new_content
         return new_content
         #for i,string in enumerate(new_content):
         #    if type(string) is str:
@@ -389,32 +418,156 @@ class simulator():
         #f.write(s1)
         #f.close()
 
-    def UMULL(self,string):
+    def ADD(self,registers):
+        """takes three arguments in registers A, B, and C, writes B+C to A"""
+        args = registers.split(',')
+        assert len(args) == 3
+        b = self.regs[int(args[1][1:])]
+        c = self.regs[int(args[2][1:])]
+        self.regs[int(args[0][1:])] = add_32(b,c)[0]
+
+    def BXEQ(self, reg):
+        """jumps PC to val stored in input reg, if there's no value stored in input, then PC jumps to exit program"""
+        assert self.z_flag is not None
+        if self.z_flag == 1:
+            if self.regs[int(reg[1:])] is None:
+                self.PC = len(self.prog)
+                #Exits program
+            else:
+                self.PC = self.regs[int(reg[1:])]
+
+    def CLZW(self,reg_a,reg_b):
+        """stores number of leading zeros of val at register b into register a"""
+        self.regs[int(reg_a[1:])] = clz_32(self.regs[int(reg_b[1:])])
+
+    def CMP(self,reg,num_or_reg):
+        """sets equality (z) flag based on whether or not reg == num_or_reg. sets sign flag (n) by XORing the MSBs of the binary representations of the two operands. Interprets arguments as unsigned integers"""
+        #call TEQW to set the N and Z flags
+        if num_or_reg.isdigit(): #if first arg is a number
+            a = self.regs[int(reg[1:])]
+            b = u_bin_se_32(to_int(num_or_reg))
+            res,msb_carry_out,over_flow = subtract_32(a,b)
+            print over_flow
+        else: #second argument is a register
+            a = self.regs[int(reg[1:])]
+            b = self.regs[int(num_or_reg[1:])]
+            res,msb_carry_out,over_flow = subtract_32(a,b)
+        self.c_flag = int(msb_carry_out,2)
+        self.v_flag = int(over_flow,2)
+        if res[2] == '1': #a-b is negative
+            self.n_flag = 1
+        else:
+            self.n_flag = 0
+        if s_bin_to_int_32(res) == 0: #a-b is zero
+            self.z_flag = 1
+        else:
+            self.z_flag = 0
+
+    def LSLW(self,reg_a,reg_b,reg_c):
+        """shifts reg_b by amount stored in reg_c (logical shift left), and stores result into reg_a"""
+        b = self.regs[int(reg_b[1:])]
+        c = self.regs[int(reg_c[1:])]
+        self.regs[int(reg_a[1:])] = l_shift_32(b,int(c,2))
+
+    def MOVGE(self,reg,num_or_reg):
+        """if last two values compared set N flag == V flag, which means that cmpr(a,b) resulted in a being >= b, then the value of reg is set to num_or_reg."""
+        if is_int_str(num_or_reg): #if second arg is a number
+            if self.n_flag == self.v_flag:
+                self.regs[int(reg[1:])] = u_bin_se_32(to_int(num_or_reg))
+        else:
+            if self.n_flag == self.v_flag:
+                self.regs[int(reg[1:])] = self.regs[int(num_or_reg[1:])]
+
+    def MOVW(self,reg,num):
+        """moves number to register"""
+        self.regs[int(reg[1:])] = u_bin_se_32(to_int(num))
+
+    def MOVEQ(self,reg,num):
+        """moves number to register if Z flag is 1"""
+        if self.z_flag == 1:
+            self.regs[int(reg[1:])] = u_bin_se_32(to_int(num))
+
+    def MOVMIW(self,reg,num):
+        """moves number to register if N flag is 1"""
+        if self.n_flag == 1:
+            self.regs[int(reg[1:])] = u_bin_se_32(to_int(num))
+
+    def PUSH(self,registers):
+        """takes any number of register arguments in a string and pushes those register values to the stack"""
+        reg_list = registers.split(',')
+        for reg in reg_list:
+            self.stack.append(self.regs[int(reg[1:])])
+
+    def NEGMI(self,reg_a,reg_b):
+        """negates value in reg_b and places it in reg_a, if the N flag is 1. Does a positive to negative and vice versa twos complement negation, not a literal bitwise inversion!"""
+        b = self.regs[int(reg_b[1:])]
+        if self.n_flag == 1:
+            inv = invert(b)
+            res,msb_carry_out,over_flow = add_32(inv,u_bin_se_32(1))
+            self.regs[int(reg_a[1:])] = res
+
+    def RSBGEW(self,reg_a,reg_b,reg_or_num_c):
+        """sets reg_a = reg_c - reg_b, if N flag == V flag"""
+        if self.n_flag == self.v_flag:
+            if is_int_str(reg_or_num_c):
+                c = u_bin_se_32(to_int(reg_or_num_c))
+            else:
+                c = self.regs[int(reg_c[1:])]
+            b = self.regs[int(reg_b[1:])]
+            self.regs[int(reg_a[1:])],o,c = subtract_32(c,b)
+
+    def RSBW(self,reg_a,reg_b,reg_or_num_c):
+        """sets reg_a = reg_c - reg_b"""
+        if is_int_str(reg_or_num_c):
+            c = u_bin_se_32(to_int(reg_or_num_c))
+        else:
+            c = self.regs[int(reg_c[1:])]
+        b = self.regs[int(reg_b[1:])]
+        self.regs[int(reg_a[1:])],o,c = subtract_32(c,b)
+
+    def TEQW(self,reg,num_or_reg):
+        """sets equality (z) flag based on whether or not reg == num_or_reg. sets sign flag (n) by XORing the MSBs of the binary representations of the two operands. Interprets value in register and the second argument as unsigned integers"""
+        if is_int_str(num_or_reg): #if second arg is a number
+        #if num_or_reg.isdigit(): #if first arg is a number
+            if int(self.regs[int(reg[1:])],2) == to_int(num_or_reg):
+                self.z_flag = 1
+            else:
+                self.z_flag = 0
+
+            if self.regs[int(reg[1:])][2] == u_bin_se_32(to_int(num_or_reg))[2]:
+                self.n_flag = 0
+            else:
+                self.n_flag = 1
+        else: #second argument is a register
+            if int(self.regs[int(reg[1:])],2) == int(self.regs[int(num_or_reg[1:])],2):
+                self.z_flag = 1
+            else:
+                self.z_flag = 0
+                    
+            if self.regs[int(reg[1:])][2] == self.regs[int(num_or_reg[1:])][2]:
+                self.n_flag = 0
+            else:
+                self.n_flag = 1
+
+    def UDIVW(self,reg_a,reg_b,reg_c):
+        """does a unsigned divide of reg_b/reg_c and stores result in reg_a"""
+        b = self.regs[int(reg_b[1:])]
+        c = self.regs[int(reg_c[1:])]
+        self.regs[int(reg_a[1:])] = u_divide_32(b,c)
+
+    def UMULL(self,registers):
         """takes 4 arguments in one string seperated by commas, saves unsigned multiply in the first two args"""
-        args = string.split(',')
+        args = registers.split(',')
         assert len(args) == 4
         c = self.regs[int(args[2][1:])]
         d = self.regs[int(args[3][1:])]
         self.regs[int(args[1][1:])],self.regs[int(args[0][1:])] = u_multiply_32_2(c,d)
 
-    def MOVW(self,reg,num):
-        """moves number to register"""
-        if len(reg) == 1:
-            self.regs[int(reg[1])] = u_bin_se_32(int(num))
-        elif len(reg) == 2:
-            self.regs[int(reg[1:2])] = u_bin_se_32(int(num))
-
-    def ADD(self,string):
-        """takes three arguments, writes B+C to A"""
-        args = string.split(',')
-        b = self.regs[int(args[1][1:])]
-        c = self.regs[int(args[2][1:])]
-        self.regs[int(args[0][1:])] = add_32(b,c)[0]
-
     def run_prog(self,prog):
         """takes a list of strings that python executes"""
         self.regs = [None]*32 #register list
         self.PC = 0
+        self.stack = []
         prog_len = len(prog)
         while self.PC < prog_len:
             if isinstance(prog[self.PC],int):

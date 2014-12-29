@@ -503,4 +503,7 @@ def operands_are_equal_30(r):
         return r
 
 if __name__ == "__main__":
-    test_div_accuracy()
+    #test_div_accuracy()
+    #print float_to_iq30(.4)
+    #print float_to_iq30(.7)
+    #print subtract_32('0b00011001100110011001100110011001','0b00000000000000000000000000000000')
