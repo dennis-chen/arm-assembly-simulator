@@ -38,7 +38,7 @@ def add_64(a,b,carry_in='0b0'):
         res = '0b'+temp_sum[-64:]
     if len(temp_sum) > len(a):
         msb_carry_out = bin(1)
-    over_flow = detect_overflow(a[3:],b[3:],carry_in,msb_carry_out)
+    over_flow = detect_overflow(a,b,res)
     return res,msb_carry_out,over_flow
 
 def invert(bin_str):
@@ -369,6 +369,10 @@ class simulator():
         with open(txt_file) as f:
             content = f.readlines()
         for i,c in enumerate(content):
+            if c.lstrip()[0] == '"':
+                content[i] = "pass"
+        # "at the beginning of a line comments it out in a text file
+        for i,c in enumerate(content):
             word_list = c.split()
             for j,word in enumerate(word_list):
                 if word[-1] == ',':
@@ -378,11 +382,8 @@ class simulator():
                     if word[0] == '{':
                         word_list[j] = word[1:-1]
                 if word[0] == '#':
-                    print word
-                    print str(int(word[1:],16))
                     word_list[j] = str(int(word[1:],16))
             content[i] = word_list
-        #print content
         for c in content:
             for i,j in enumerate(c):
                 if i!=0:
@@ -406,6 +407,13 @@ class simulator():
         for i,string in enumerate(new_content):
             if type(string) is str:
                 new_content[i] = string.replace("LR","R14")
+        #replace branch statements with branch to line number
+        for i,thing in enumerate(new_content):
+            if type(thing) is list:
+                for j,elem in enumerate(new_content):
+                    if type(elem) is str:
+                        new_content[j] = elem.replace(thing[0],str(i))
+                new_content[i] = i
         print new_content
         return new_content
         #for i,string in enumerate(new_content):
@@ -418,13 +426,38 @@ class simulator():
         #f.write(s1)
         #f.close()
 
-    def ADD(self,registers):
-        """takes three arguments in registers A, B, and C, writes B+C to A"""
-        args = registers.split(',')
-        assert len(args) == 3
-        b = self.regs[int(args[1][1:])]
-        c = self.regs[int(args[2][1:])]
-        self.regs[int(args[0][1:])] = add_32(b,c)[0]
+    def ADD(self,reg_a,reg_b,reg_or_num_c = None):
+        """sets reg_a = reg_b + reg_c with 3 args, or reg_a = reg_a + reg_b with two arguments"""
+        if reg_or_num_c is not None:
+            if is_int_str(reg_or_num_c):
+                c = u_bin_se_32(to_int(reg_or_num_c))
+            else:
+                c = self.regs[int(reg_or_num_c[1:])]
+            b = self.regs[int(reg_b[1:])]
+            self.regs[int(reg_a[1:])],o,c = add_32(b,c)
+        else:
+            a = self.regs[int(reg_a[1:])]
+            b = self.regs[int(reg_b[1:])]
+            self.regs[int(reg_a[1:])],o,c = add_32(a,b)
+
+#
+#    def ADD(self,registers):
+#        """takes three arguments in registers A, B, and C, writes B+C to A"""
+#        args = registers.split(',')
+#        assert len(args) == 3
+#        b = self.regs[int(args[1][1:])]
+#        c = self.regs[int(args[2][1:])]
+#        self.regs[int(args[0][1:])] = add_32(b,c)[0]
+
+    def BGE(self, branch_index):
+        """jumps PC to branch_index if last comparison of a,b said that a >= b."""
+        if self.n_flag == self.v_flag:
+            self.PC = int(branch_index)
+
+    def BLE(self, branch_index):
+        """jumps PC to branch_index if last comparison of a,b said that a <= b."""
+        if (self.n_flag != self.v_flag) or self.z_flag == 1:
+            self.PC = int(branch_index)
 
     def BXEQ(self, reg):
         """jumps PC to val stored in input reg, if there's no value stored in input, then PC jumps to exit program"""
@@ -469,6 +502,13 @@ class simulator():
         c = self.regs[int(reg_c[1:])]
         self.regs[int(reg_a[1:])] = l_shift_32(b,int(c,2))
 
+    def MLSW(self,reg_a,reg_b,reg_c,reg_d):
+        """takes last 32 bits of reg_c*reg_d, subtracts it from reg_b, stores result into reg_a"""
+        b = self.regs[int(reg_b[1:])]
+        c = self.regs[int(reg_c[1:])]
+        d = self.regs[int(reg_d[1:])]
+        self.regs[int(reg_a[1:])],c,o = subtract_32(b,s_multiply_ls_32(c,d))   
+
     def MOVGE(self,reg,num_or_reg):
         """if last two values compared set N flag == V flag, which means that cmpr(a,b) resulted in a being >= b, then the value of reg is set to num_or_reg."""
         if is_int_str(num_or_reg): #if second arg is a number
@@ -492,12 +532,6 @@ class simulator():
         if self.n_flag == 1:
             self.regs[int(reg[1:])] = u_bin_se_32(to_int(num))
 
-    def PUSH(self,registers):
-        """takes any number of register arguments in a string and pushes those register values to the stack"""
-        reg_list = registers.split(',')
-        for reg in reg_list:
-            self.stack.append(self.regs[int(reg[1:])])
-
     def NEGMI(self,reg_a,reg_b):
         """negates value in reg_b and places it in reg_a, if the N flag is 1. Does a positive to negative and vice versa twos complement negation, not a literal bitwise inversion!"""
         b = self.regs[int(reg_b[1:])]
@@ -505,6 +539,39 @@ class simulator():
             inv = invert(b)
             res,msb_carry_out,over_flow = add_32(inv,u_bin_se_32(1))
             self.regs[int(reg_a[1:])] = res
+
+    def NEGEQ(self,reg_a,reg_b):
+        """negates value in reg_b and places it in reg_a, if the Z flag is 1. Does a positive to negative and vice versa twos complement negation, not a literal bitwise inversion!"""
+        b = self.regs[int(reg_b[1:])]
+        if self.z_flag == 1:
+            inv = invert(b)
+            res,msb_carry_out,over_flow = add_32(inv,u_bin_se_32(1))
+            self.regs[int(reg_a[1:])] = res
+
+    def POP(self,registers):
+        """takes any number of register arguments in a string and pops stack into those registers, but only if the last comparison of a,b set flags indicating that a >= b"""
+        reg_list = registers.split(',')
+        for i in range(len(reg_list)):
+            if reg_list[-i] != 'PC':
+                self.regs[int(reg_list[-i][1:])] = self.stack[-i]
+            else:
+                self.PC = self.stack[-i]
+
+    def POPGE(self,registers):
+        """takes any number of register arguments in a string and pops stack into those registers, but only if the last comparison of a,b set flags indicating that a >= b"""
+        if self.n_flag == self.v_flag:
+            reg_list = registers.split(',')
+            for i in range(len(reg_list)):
+                if reg_list[-i] != 'PC':
+                    self.regs[int(reg_list[-i][1:])] = self.stack[-i]
+                else:
+                    self.PC = self.stack[-i]
+
+    def PUSH(self,registers):
+        """takes any number of register arguments in a string and pushes those register values to the stack"""
+        reg_list = registers.split(',')
+        for reg in reg_list:
+            self.stack.append(self.regs[int(reg[1:])])
 
     def RSBGEW(self,reg_a,reg_b,reg_or_num_c):
         """sets reg_a = reg_c - reg_b, if N flag == V flag"""
@@ -521,9 +588,18 @@ class simulator():
         if is_int_str(reg_or_num_c):
             c = u_bin_se_32(to_int(reg_or_num_c))
         else:
-            c = self.regs[int(reg_c[1:])]
+            c = self.regs[int(reg_or_num_c[1:])]
         b = self.regs[int(reg_b[1:])]
         self.regs[int(reg_a[1:])],o,c = subtract_32(c,b)
+
+    def SUBW(self,reg_a,reg_b,reg_or_num_c):
+        """sets reg_a = reg_b - reg_c"""
+        if is_int_str(reg_or_num_c):
+            c = u_bin_se_32(to_int(reg_or_num_c))
+        else:
+            c = self.regs[int(reg_or_num_c[1:])]
+        b = self.regs[int(reg_b[1:])]
+        self.regs[int(reg_a[1:])],o,c = subtract_32(b,c)
 
     def TEQW(self,reg,num_or_reg):
         """sets equality (z) flag based on whether or not reg == num_or_reg. sets sign flag (n) by XORing the MSBs of the binary representations of the two operands. Interprets value in register and the second argument as unsigned integers"""
@@ -569,13 +645,17 @@ class simulator():
         self.PC = 0
         self.stack = []
         prog_len = len(prog)
-        while self.PC < prog_len:
+        while self.PC < prog_len and self.PC is not None:
             if isinstance(prog[self.PC],int):
-                self.PC = prog[self.PC]
+                print "jumped to "+str(prog[self.PC])
             else:
                 print prog[self.PC]
-                exec prog[self.PC]
+                try:
+                    exec prog[self.PC]
+                except Exception:
+                    print "This instruction is not valid or has not been implemented yet!"
                 print self.regs
+            if self.PC is not None:
                 self.PC+=1
         print "Simulation finished!"
 
@@ -583,3 +663,5 @@ if __name__ == "__main__":
     for arg in sys.argv:
         assert os.path.isfile(arg)
     s = simulator(sys.argv[1])
+    print s.regs[0]
+    print iq30_to_float(s.regs[0])
