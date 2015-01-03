@@ -2,7 +2,8 @@ import re
 import sys
 import os
 
-CONDITIONAL_COMMAND_REGEX = re.compile(r"\b(\w*)(EQ|NE|CS|HS|CC|LO|MI|PL|VS|VC|HI|LS|GE|LT|GT|LE)(\_W|\_L)?\b")
+VALID_COMMAND_REGEX = re.compile(r"\b(MOV|TEQ|BX|PUSH|CMP|NEG|CLZ|LSL|RSB|UDIV|POP|MLS|B|SUB|ADD)(\w*)")
+CONDITIONAL_MODIFIER_REGEX = re.compile(r"\b(EQ|NE|CS|HS|CC|LO|MI|PL|VS|VC|HI|LS|GE|LT|GT|LE)(\_W|\_L)?\b")
 NOT_CONDITIONAL_REGEX = re.compile(r"\b(TEQ|MLS)(_W|_L)?\b")
 
 def add_32(a,b,carry_in='0b0'):
@@ -407,15 +408,22 @@ class simulator():
         #turn assembly commands into function calls, dealing with conditional commands as well
         for i, line in enumerate(content):
             command = line.split()[0]
-            if CONDITIONAL_COMMAND_REGEX.match(command) is not None and NOT_CONDITIONAL_REGEX.match(command) is None:
-                text_before,conditional,text_after = CONDITIONAL_COMMAND_REGEX.findall(command)[0]
-                content[i] = 'self.handle_conditionals("'+text_before+text_after+'","'+conditional+'","'+line.replace(command,"").lstrip()+'")'
+            if VALID_COMMAND_REGEX.match(command) is None:
+                raise Exception("Command %s is not a valid command or is not implemented!"%command)
+            stripped_command,modifiers = VALID_COMMAND_REGEX.findall(command)[0]
+            if modifiers == "" or modifiers == "_L" or modifiers == "_W":
+                    content[i] = 'self.'+command+'("'+line.replace(command,"").lstrip()+'")'
             else:
-                content[i] = 'self.'+command+'("'+line.replace(command,"").lstrip()+'")'
+                if CONDITIONAL_MODIFIER_REGEX.match(modifiers) is not None:
+                    conditional,text_after = CONDITIONAL_MODIFIER_REGEX.findall(modifiers)[0]
+                    content[i] = 'self.handle_conditionals("'+stripped_command+text_after+'","'+conditional+'","'+line.replace(command,"").lstrip()+'")'
+                else:
+                    print modifiers
+                    print line
+                    raise Exception("Conditional %s is not valid or not implemented!"%conditional)
         #replace LR and SP with appropriate registers
         for i, line in enumerate(content):
             content[i] = line.replace("LR","R14").replace("SP","R13")
-        print content
         return content
 
     def ADD(self,args):
