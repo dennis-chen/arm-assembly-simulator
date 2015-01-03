@@ -232,7 +232,7 @@ def abs_32(a):
     """returns positive twos complement representation of binary str"""
     assert len(a) == 34
     if a[2] == '1':
-        return s_multiply_ls_32(a,s_bin_32(-1))
+        return s_multiply_ls_32(a,s_bin_se_32(-1))
     else:
         return a
 
@@ -298,24 +298,22 @@ def iq30_to_float(a):
     assert isinstance(a,str)
     assert len(a) == 34
     sign_bit = a[2]
+    if sign_bit == '1':
+        a = s_multiply_ls_32(a,s_bin_se_32(-1))
     raw_num = a[4:]
     float_res = 0
+    for i, bit in enumerate(raw_num):
+        float_res += 2**-(i+1)*int(bit,2)
     if sign_bit == '0':
-        for i, bit in enumerate(raw_num):
-            float_res += 2**-(i+1)*int(bit,2)
+        return float_res
     else:
-        for i, bit in enumerate(raw_num):
-            float_res -= 2**-(i+1)*int(bit,2)
-    return float_res
+        return float_res*-1
 
 def float_to_iq30(a):
     """converts a float to an iq30 number"""
     abs_a = abs(a)
     assert abs_a <= 1
-    if a >= 0:
-        iq30 = '0b'+'0'+31*'0'
-    else:
-        iq30 = '0b'+'1'+31*'0'
+    iq30 = '0b'+'0'+31*'0'
     iq30_l = list(iq30)
     remainder = abs_a
     for i in range(30):
@@ -323,7 +321,11 @@ def float_to_iq30(a):
             iq30_l[i+4] = '1'
             exp = -(i+1)
             remainder -= 2**-(i+1)
-    return ''.join(iq30_l)
+    pos_rep = ''.join(iq30_l)
+    if a >= 0:
+        return pos_rep
+    else:
+        return s_multiply_ls_32(pos_rep,s_bin_se_32(-1))
 
 def test_div_accuracy():
     """evaluates accuracy of ARM fixed point IQ30 division vs python's floating point division, which we'll take as perfectly accurate."""
@@ -504,9 +506,7 @@ def operands_are_equal_30(r):
 
 if __name__ == "__main__":
     #test_div_accuracy()
-    print float_to_iq30(.25)
-    print float_to_iq30(.5)
-    print float_to_iq30(.4)
-    print float_to_iq30(.7)
-    #print subtract_32('0b00011001100110011001100110011001','0b00000000000000000000000000000000')
-    print float_to_iq30(0.57142857142)
+    print s_multiply_ls_32(float_to_iq30(-0.3),s_bin_se_32(-1))
+    print float_to_iq30(-0.3)
+    #print float_to_iq30(0.7)
+    print iq30_to_float(s_divide_iq30(float_to_iq30(-0.3),float_to_iq30(0.7)))

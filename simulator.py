@@ -4,7 +4,6 @@ import os
 
 VALID_COMMAND_REGEX = re.compile(r"\b(MOV|TEQ|BX|PUSH|CMP|NEG|CLZ|LSL|RSB|UDIV|POP|MLS|B|SUB|ADD)(\w*)")
 CONDITIONAL_MODIFIER_REGEX = re.compile(r"\b(EQ|NE|CS|HS|CC|LO|MI|PL|VS|VC|HI|LS|GE|LT|GT|LE)(\_W|\_L)?\b")
-NOT_CONDITIONAL_REGEX = re.compile(r"\b(TEQ|MLS)(_W|_L)?\b")
 
 def add_32(a,b,carry_in='0b0'):
     """takes two 32-digit binary strings and returns their sum in the same format, along with overflow and carryout."""
@@ -248,24 +247,22 @@ def iq30_to_float(a):
     assert isinstance(a,str)
     assert len(a) == 34
     sign_bit = a[2]
+    if sign_bit == '1':
+        a = s_multiply_ls_32(a,s_bin_se_32(-1))
     raw_num = a[4:]
     float_res = 0
+    for i, bit in enumerate(raw_num):
+        float_res += 2**-(i+1)*int(bit,2)
     if sign_bit == '0':
-        for i, bit in enumerate(raw_num):
-            float_res += 2**-(i+1)*int(bit,2)
+        return float_res
     else:
-        for i, bit in enumerate(raw_num):
-            float_res -= 2**-(i+1)*int(bit,2)
-    return float_res
+        return float_res*-1
 
 def float_to_iq30(a):
     """converts a float to an iq30 number"""
     abs_a = abs(a)
     assert abs_a <= 1
-    if a >= 0:
-        iq30 = '0b'+'0'+31*'0'
-    else:
-        iq30 = '0b'+'1'+31*'0'
+    iq30 = '0b'+'0'+31*'0'
     iq30_l = list(iq30)
     remainder = abs_a
     for i in range(30):
@@ -273,7 +270,11 @@ def float_to_iq30(a):
             iq30_l[i+4] = '1'
             exp = -(i+1)
             remainder -= 2**-(i+1)
-    return ''.join(iq30_l)
+    pos_rep = ''.join(iq30_l)
+    if a >= 0:
+        return pos_rep
+    else:
+        return s_multiply_ls_32(pos_rep,s_bin_se_32(-1))
 
 def test_float_to_iq30():
     res = s_divide_iq30(float_to_iq30(.25),float_to_iq30(.25))
@@ -452,16 +453,6 @@ class simulator():
         """jumps PC to branch_index"""
         self.PC = int(branch_index)
 
-    def BGE(self, branch_index):
-        """jumps PC to branch_index if last comparison of a,b said that a >= b."""
-        if self.n_flag == self.v_flag:
-            self.PC = int(branch_index)
-
-    def BLE(self, branch_index):
-        """jumps PC to branch_index if last comparison of a,b said that a <= b."""
-        if (self.n_flag != self.v_flag) or self.z_flag == 1:
-            self.PC = int(branch_index)
-
     def BX(self, reg):
         """jumps PC to val stored in input reg, if there's no value stored in input, then PC jumps to exit program"""
         if self.regs[int(reg[1:])] is None:
@@ -536,12 +527,12 @@ class simulator():
         self.regs[int(reg_a[1:])] = l_shift_32(b,int(c,2))
 
     def MLS_W(self,args):
-        """takes last 32 bits of reg_c*reg_d, subtracts it from reg_b, stores result into reg_a"""
+        """takes last 32 bits of reg_b*reg_c, subtracts it from reg_d, stores result into reg_a"""
         reg_a,reg_b,reg_c,reg_d = self.split_args(args)
         b = self.regs[int(reg_b[1:])]
         c = self.regs[int(reg_c[1:])]
         d = self.regs[int(reg_d[1:])]
-        self.regs[int(reg_a[1:])],c,o = subtract_32(b,s_multiply_ls_32(c,d))   
+        self.regs[int(reg_a[1:])],c,o = subtract_32(d,s_multiply_ls_32(b,c))   
 
     def MOV(self,args):
         """moves number to register. Not sure if there's a difference between MOV and MOV_W in arm assembly, so the functions were left separate."""
@@ -558,13 +549,20 @@ class simulator():
         self.regs[int(reg[1:])] = u_bin_se_32(to_int(num))
 
     def NEG(self,args):
-        """negates value in reg_b and places it in reg_a. Does a positive to negative and vice versa twos complement negation, not a literal bitwise inversion!"""
+        """multiples value in reg_b by negative 1 and places result into reg_a"""
         reg_a,reg_b = self.split_args(args)
         b = self.regs[int(reg_b[1:])]
-        if self.n_flag == 1:
-            inv = invert(b)
-            res,msb_carry_out,over_flow = add_32(inv,u_bin_se_32(1))
-            self.regs[int(reg_a[1:])] = res
+        res = s_multiply_ls_32(b,s_bin_se_32(-1))
+        self.regs[int(reg_a[1:])] = res
+        #if self.n_flag == 1:
+        #    if b[2] == "0": #value to be inverted is positive
+        #        inv = invert(b)
+        #        res,msb_carry_out,over_flow = add_32(inv,u_bin_se_32(1))
+        #        self.regs[int(reg_a[1:])] = res
+        #    if b[2] == "1": #value to be inverted is negative
+        #        res,msb_carry_out,over_flow = subtract_32(b,u_bin_se_32(1))
+        #        inv = invert(res)
+        #        self.regs[int(reg_a[1:])] = inv
 
     def POP(self,registers):
         """takes any number of register arguments in a string and pops stack into those registers, but only if the last comparison of a,b set flags indicating that a >= b"""
@@ -653,7 +651,7 @@ class simulator():
         while self.PC < prog_len and self.PC is not None:
             print prog[self.PC]
             exec prog[self.PC]
-            print self.regs
+            print self.regs[0]
             if self.PC is not None:
                 self.PC+=1
         print "Simulation finished!"
