@@ -2,6 +2,9 @@ import re
 import sys
 import os
 
+CONDITIONAL_COMMAND_REGEX = re.compile(r"\b(\w*)(EQ|NE|CS|HS|CC|LO|MI|PL|VS|VC|HI|LS|GE|LT|GT|LE)(\_W|\_L)?\b")
+NOT_CONDITIONAL_REGEX = re.compile(r"\b(TEQ|MLS)(_W|_L)?\b")
+
 def add_32(a,b,carry_in='0b0'):
     """takes two 32-digit binary strings and returns their sum in the same format, along with overflow and carryout."""
     assert len(a) == 34 and len(b) == 34
@@ -343,13 +346,15 @@ def is_int_str(val):
 
 def to_int(val):
     """changes val to an integer, where val is a decimal, binary, or hex string"""
+    assert val[0] == "#"
+    val = val[1:]
     if val.isdigit():
         return int(val)
-    assert len(val) >= 3
     if val[:2] == '0b':
         return int(val,2)
     if val[:2] == '0x':
         return int(val,16)
+    raise Exception
 
 class simulator():
     """simulates an arm program given to it as a text file"""
@@ -365,89 +370,79 @@ class simulator():
         self.v_flag = None
 
     def convert_txt(self,txt_file):
+        """converts arm assembly text file to list of python instructions"""
         content = []
         with open(txt_file) as f:
             content = f.readlines()
-        for i,c in enumerate(content):
-            if c.lstrip()[0] == '"':
-                content[i] = "pass"
-        # "at the beginning of a line comments it out in a text file
-        for i,c in enumerate(content):
-            word_list = c.split()
-            for j,word in enumerate(word_list):
-                if word[-1] == ',':
-                    word_list[j] = word[:-1]
-                if word[-1] == '}':
-                    word_list[j] = word[:-1]
-                    if word[0] == '{':
-                        word_list[j] = word[1:-1]
-                if word[0] == '#':
-                    word_list[j] = str(int(word[1:],16))
-            content[i] = word_list
-        for c in content:
-            for i,j in enumerate(c):
-                if i!=0:
-                    c[i] = "'"+str(c[i])+"'"
-        new_content = []
-        for c in content:
-            if c[0][:2] != 'IT':
-                new_content.append(c)
-        for i,c in enumerate(new_content):
-            if len(c) > 1:
-                new_c = c[0]+'('
-                for j in xrange(len(c)-1):
-                    new_c += c[j+1]
-                    if j != len(c) - 2:
-                        new_c += ','
-                new_c += ')'
-                new_content[i] = new_c
-        for i,string in enumerate(new_content):
-            if type(string) is str:
-                new_content[i] = 'self.'+string.replace(".","")
-        for i,string in enumerate(new_content):
-            if type(string) is str:
-                new_content[i] = string.replace("LR","R14")
-        #replace branch statements with branch to line number
-        for i,thing in enumerate(new_content):
-            if type(thing) is list:
-                for j,elem in enumerate(new_content):
-                    if type(elem) is str:
-                        new_content[j] = elem.replace(thing[0],str(i))
-                new_content[i] = i
-        print new_content
-        return new_content
-        #for i,string in enumerate(new_content):
-        #    if type(string) is str:
-        #        new_content[i] = re.sub("R([^,]+)",
-        #print "text conversion finished! output to your_orig_to_python.txt"
-        #outfile = self.txt[:-4] + "_to_python.txt"
-        #f=open(outfile,'w+')
-        #s1=''.join(str(new_content))
-        #f.write(s1)
-        #f.close()
+        #strip leading and trailing whitespaces
+        for i, line in enumerate(content):
+            content[i] = line.strip()
+        #remove commented lines and unneeded IT lines that tell ARM processor that conditional statements are about to be executed
+        no_comments = []
+        for i, line in enumerate(content):
+            try:
+                if line[0] != '"' and line[:2] != 'IT':
+                    no_comments.append(line)
+            except IndexError:
+                print "Could not parse line "+str(i)
+        content = no_comments
+        #deal with jump labels
+        no_labels = []
+        labels = []
+        for i, line in enumerate(content):
+            if re.search(r"\s", line) is None:
+                #matches only match at beginning of string!
+                if re.match(r'\A[\w-]+\Z', line) is None:
+                    raise Exception("Jump labels can only have alphanumeric chars and underscores!")
+                labels.append((line,i))
+            else:
+                no_labels.append(line)
+        for i, (label, index) in enumerate(labels):
+            for j, line in enumerate(no_labels):
+                no_labels[j] = line.replace(label,str(index-i-1))
+        content = no_labels
+        #remove curly braces and replace periods w/ underscores
+        for i, line in enumerate(content):
+            content[i] = re.sub(r'[{}]','',line).replace(".","_")
+        #turn assembly commands into function calls, dealing with conditional commands as well
+        for i, line in enumerate(content):
+            command = line.split()[0]
+            if CONDITIONAL_COMMAND_REGEX.match(command) is not None and NOT_CONDITIONAL_REGEX.match(command) is None:
+                text_before,conditional,text_after = CONDITIONAL_COMMAND_REGEX.findall(command)[0]
+                content[i] = 'self.handle_conditionals("'+text_before+text_after+'","'+conditional+'","'+line.replace(command,"").lstrip()+'")'
+            else:
+                content[i] = 'self.'+command+'("'+line.replace(command,"").lstrip()+'")'
+        #replace LR and SP with appropriate registers
+        for i, line in enumerate(content):
+            content[i] = line.replace("LR","R14").replace("SP","R13")
+        print content
+        return content
 
-    def ADD(self,reg_a,reg_b,reg_or_num_c = None):
+    def ADD(self,args):
         """sets reg_a = reg_b + reg_c with 3 args, or reg_a = reg_a + reg_b with two arguments"""
+        args_split = self.split_args(args)
+        if len(args_split) < 3:
+            reg_or_num_c =  None
+            reg_a,reg_b = args_split
+        else:
+            reg_a,reg_b,reg_or_num_c = args_split
         if reg_or_num_c is not None:
             if is_int_str(reg_or_num_c):
                 c = u_bin_se_32(to_int(reg_or_num_c))
             else:
                 c = self.regs[int(reg_or_num_c[1:])]
             b = self.regs[int(reg_b[1:])]
+            print b
+            print c
             self.regs[int(reg_a[1:])],o,c = add_32(b,c)
         else:
             a = self.regs[int(reg_a[1:])]
             b = self.regs[int(reg_b[1:])]
             self.regs[int(reg_a[1:])],o,c = add_32(a,b)
 
-#
-#    def ADD(self,registers):
-#        """takes three arguments in registers A, B, and C, writes B+C to A"""
-#        args = registers.split(',')
-#        assert len(args) == 3
-#        b = self.regs[int(args[1][1:])]
-#        c = self.regs[int(args[2][1:])]
-#        self.regs[int(args[0][1:])] = add_32(b,c)[0]
+    def B(self, branch_index):
+        """jumps PC to branch_index"""
+        self.PC = int(branch_index)
 
     def BGE(self, branch_index):
         """jumps PC to branch_index if last comparison of a,b said that a >= b."""
@@ -459,24 +454,23 @@ class simulator():
         if (self.n_flag != self.v_flag) or self.z_flag == 1:
             self.PC = int(branch_index)
 
-    def BXEQ(self, reg):
+    def BX(self, reg):
         """jumps PC to val stored in input reg, if there's no value stored in input, then PC jumps to exit program"""
-        assert self.z_flag is not None
-        if self.z_flag == 1:
-            if self.regs[int(reg[1:])] is None:
-                self.PC = len(self.prog)
-                #Exits program
-            else:
-                self.PC = self.regs[int(reg[1:])]
+        if self.regs[int(reg[1:])] is None:
+            self.PC = len(self.prog)
+            #Exits program
+        else:
+            self.PC = self.regs[int(reg[1:])]
 
-    def CLZW(self,reg_a,reg_b):
+    def CLZ_W(self,args):
         """stores number of leading zeros of val at register b into register a"""
+        reg_a, reg_b = self.split_args(args)
         self.regs[int(reg_a[1:])] = clz_32(self.regs[int(reg_b[1:])])
 
-    def CMP(self,reg,num_or_reg):
+    def CMP(self,args):
         """sets equality (z) flag based on whether or not reg == num_or_reg. sets sign flag (n) by XORing the MSBs of the binary representations of the two operands. Interprets arguments as unsigned integers"""
-        #call TEQW to set the N and Z flags
-        if num_or_reg.isdigit(): #if first arg is a number
+        reg, num_or_reg = self.split_args(args)
+        if is_int_str(num_or_reg): #if second arg is a number
             a = self.regs[int(reg[1:])]
             b = u_bin_se_32(to_int(num_or_reg))
             res,msb_carry_out,over_flow = subtract_32(a,b)
@@ -496,54 +490,70 @@ class simulator():
         else:
             self.z_flag = 0
 
-    def LSLW(self,reg_a,reg_b,reg_c):
+    def handle_conditionals(self,command,conditional,args):
+        """executes statements conditionally depending on how flags are set"""
+        if conditional == "EQ":
+            if self.z_flag == 1:
+                print "self."+command+"('"+args+"')"
+                exec("self."+command+"('"+args+"')")
+
+        elif conditional == "GE":
+            if self.n_flag == self.z_flag:
+                print "self."+command+"('"+args+"')"
+                exec("self."+command+"('"+args+"')")
+
+        elif conditional == "LE":
+            if self.z_flag == 1 or self.n_flag != self.z_flag:
+                print "self."+command+"('"+args+"')"
+                exec("self."+command+"('"+args+"')")
+
+        elif conditional == "MI":
+            if self.n_flag == 1:
+                print "self."+command+"('"+args+"')"
+                exec("self."+command+"('"+args+"')")
+
+        elif conditional == "NE":
+            if self.z_flag == 0:
+                print "self."+command+"('"+args+"')"
+                exec("self."+command+"('"+args+"')")
+
+        else:
+            raise Exception("This conditional statement not implemented yet!")
+
+    def LSL_W(self,args):
         """shifts reg_b by amount stored in reg_c (logical shift left), and stores result into reg_a"""
+        reg_a,reg_b,reg_c = self.split_args(args)
         b = self.regs[int(reg_b[1:])]
         c = self.regs[int(reg_c[1:])]
         self.regs[int(reg_a[1:])] = l_shift_32(b,int(c,2))
 
-    def MLSW(self,reg_a,reg_b,reg_c,reg_d):
+    def MLS_W(self,args):
         """takes last 32 bits of reg_c*reg_d, subtracts it from reg_b, stores result into reg_a"""
+        reg_a,reg_b,reg_c,reg_d = self.split_args(args)
         b = self.regs[int(reg_b[1:])]
         c = self.regs[int(reg_c[1:])]
         d = self.regs[int(reg_d[1:])]
         self.regs[int(reg_a[1:])],c,o = subtract_32(b,s_multiply_ls_32(c,d))   
 
-    def MOVGE(self,reg,num_or_reg):
-        """if last two values compared set N flag == V flag, which means that cmpr(a,b) resulted in a being >= b, then the value of reg is set to num_or_reg."""
-        if is_int_str(num_or_reg): #if second arg is a number
-            if self.n_flag == self.v_flag:
-                self.regs[int(reg[1:])] = u_bin_se_32(to_int(num_or_reg))
-        else:
-            if self.n_flag == self.v_flag:
-                self.regs[int(reg[1:])] = self.regs[int(num_or_reg[1:])]
-
-    def MOVW(self,reg,num):
-        """moves number to register"""
+    def MOV(self,args):
+        """moves number to register. Not sure if there's a difference between MOV and MOV_W in arm assembly, so the functions were left separate."""
+        args_split = self.split_args(args)
+        reg = args_split[0]
+        num = args_split[1]
         self.regs[int(reg[1:])] = u_bin_se_32(to_int(num))
 
-    def MOVEQ(self,reg,num):
-        """moves number to register if Z flag is 1"""
-        if self.z_flag == 1:
-            self.regs[int(reg[1:])] = u_bin_se_32(to_int(num))
+    def MOV_W(self,args):
+        """moves number to register"""
+        args_split = self.split_args(args)
+        reg = args_split[0]
+        num = args_split[1]
+        self.regs[int(reg[1:])] = u_bin_se_32(to_int(num))
 
-    def MOVMIW(self,reg,num):
-        """moves number to register if N flag is 1"""
-        if self.n_flag == 1:
-            self.regs[int(reg[1:])] = u_bin_se_32(to_int(num))
-
-    def NEGMI(self,reg_a,reg_b):
-        """negates value in reg_b and places it in reg_a, if the N flag is 1. Does a positive to negative and vice versa twos complement negation, not a literal bitwise inversion!"""
+    def NEG(self,args):
+        """negates value in reg_b and places it in reg_a. Does a positive to negative and vice versa twos complement negation, not a literal bitwise inversion!"""
+        reg_a,reg_b = self.split_args(args)
         b = self.regs[int(reg_b[1:])]
         if self.n_flag == 1:
-            inv = invert(b)
-            res,msb_carry_out,over_flow = add_32(inv,u_bin_se_32(1))
-            self.regs[int(reg_a[1:])] = res
-
-    def NEGEQ(self,reg_a,reg_b):
-        """negates value in reg_b and places it in reg_a, if the Z flag is 1. Does a positive to negative and vice versa twos complement negation, not a literal bitwise inversion!"""
-        b = self.regs[int(reg_b[1:])]
-        if self.z_flag == 1:
             inv = invert(b)
             res,msb_carry_out,over_flow = add_32(inv,u_bin_se_32(1))
             self.regs[int(reg_a[1:])] = res
@@ -557,34 +567,15 @@ class simulator():
             else:
                 self.PC = self.stack[-i]
 
-    def POPGE(self,registers):
-        """takes any number of register arguments in a string and pops stack into those registers, but only if the last comparison of a,b set flags indicating that a >= b"""
-        if self.n_flag == self.v_flag:
-            reg_list = registers.split(',')
-            for i in range(len(reg_list)):
-                if reg_list[-i] != 'PC':
-                    self.regs[int(reg_list[-i][1:])] = self.stack[-i]
-                else:
-                    self.PC = self.stack[-i]
-
     def PUSH(self,registers):
         """takes any number of register arguments in a string and pushes those register values to the stack"""
         reg_list = registers.split(',')
         for reg in reg_list:
             self.stack.append(self.regs[int(reg[1:])])
 
-    def RSBGEW(self,reg_a,reg_b,reg_or_num_c):
-        """sets reg_a = reg_c - reg_b, if N flag == V flag"""
-        if self.n_flag == self.v_flag:
-            if is_int_str(reg_or_num_c):
-                c = u_bin_se_32(to_int(reg_or_num_c))
-            else:
-                c = self.regs[int(reg_c[1:])]
-            b = self.regs[int(reg_b[1:])]
-            self.regs[int(reg_a[1:])],o,c = subtract_32(c,b)
-
-    def RSBW(self,reg_a,reg_b,reg_or_num_c):
+    def RSB_W(self,args):
         """sets reg_a = reg_c - reg_b"""
+        reg_a,reg_b,reg_or_num_c = self.split_args(args)
         if is_int_str(reg_or_num_c):
             c = u_bin_se_32(to_int(reg_or_num_c))
         else:
@@ -592,8 +583,13 @@ class simulator():
         b = self.regs[int(reg_b[1:])]
         self.regs[int(reg_a[1:])],o,c = subtract_32(c,b)
 
-    def SUBW(self,reg_a,reg_b,reg_or_num_c):
+    def split_args(self,args):
+        split_list =  re.split(r'\s*,|,\s*|\s',args)
+        return filter(None,split_list)
+
+    def SUB_W(self,args):
         """sets reg_a = reg_b - reg_c"""
+        reg_a,reg_b,reg_or_num_c = self.split_args(args)
         if is_int_str(reg_or_num_c):
             c = u_bin_se_32(to_int(reg_or_num_c))
         else:
@@ -601,10 +597,10 @@ class simulator():
         b = self.regs[int(reg_b[1:])]
         self.regs[int(reg_a[1:])],o,c = subtract_32(b,c)
 
-    def TEQW(self,reg,num_or_reg):
+    def TEQ_W(self,args):
         """sets equality (z) flag based on whether or not reg == num_or_reg. sets sign flag (n) by XORing the MSBs of the binary representations of the two operands. Interprets value in register and the second argument as unsigned integers"""
+        reg,num_or_reg = self.split_args(args)
         if is_int_str(num_or_reg): #if second arg is a number
-        #if num_or_reg.isdigit(): #if first arg is a number
             if int(self.regs[int(reg[1:])],2) == to_int(num_or_reg):
                 self.z_flag = 1
             else:
@@ -625,8 +621,9 @@ class simulator():
             else:
                 self.n_flag = 1
 
-    def UDIVW(self,reg_a,reg_b,reg_c):
+    def UDIV_W(self,args):
         """does a unsigned divide of reg_b/reg_c and stores result in reg_a"""
+        reg_a,reg_b,reg_c = self.split_args(args)
         b = self.regs[int(reg_b[1:])]
         c = self.regs[int(reg_c[1:])]
         self.regs[int(reg_a[1:])] = u_divide_32(b,c)
@@ -646,15 +643,9 @@ class simulator():
         self.stack = []
         prog_len = len(prog)
         while self.PC < prog_len and self.PC is not None:
-            if isinstance(prog[self.PC],int):
-                print "jumped to "+str(prog[self.PC])
-            else:
-                print prog[self.PC]
-                try:
-                    exec prog[self.PC]
-                except Exception:
-                    print "This instruction is not valid or has not been implemented yet!"
-                print self.regs
+            print prog[self.PC]
+            exec prog[self.PC]
+            print self.regs
             if self.PC is not None:
                 self.PC+=1
         print "Simulation finished!"

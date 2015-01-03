@@ -504,6 +504,9 @@ def operands_are_equal_30(r):
 
 if __name__ == "__main__":
     #test_div_accuracy()
-    #print float_to_iq30(.4)
-    #print float_to_iq30(.7)
+    print float_to_iq30(.25)
+    print float_to_iq30(.5)
+    print float_to_iq30(.4)
+    print float_to_iq30(.7)
     #print subtract_32('0b00011001100110011001100110011001','0b00000000000000000000000000000000')
+    print float_to_iq30(0.57142857142)
